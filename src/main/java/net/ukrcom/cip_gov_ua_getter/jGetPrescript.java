@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
+ * Клас зчитує перелік доменів з відповідних text/plain файлів у розпорядженнях.
  *
  * @author olden
  */
@@ -29,11 +30,21 @@ public class jGetPrescript {
     protected String bodyPrescript;
     protected String id;
 
+    /**
+     * Конструктор класа. Зчитує перелік доменів для блокування з прикріпленого
+     * text/plain файла.
+     *
+     * @param p - об'єкт властивостей.
+     * @param i - ідентифікатор id прикріпленого text/plain файла з доменами для
+     * блокування.
+     * @throws MalformedURLException
+     * @throws IOException
+     */
     public jGetPrescript(Properties p, String i) throws MalformedURLException, IOException {
         this.id = i;
         this.urlPrescript = p.getProperty(
                 "urlPrescript",
-                "https://cip.gov.ua/services/cm/api/attachment/download"
+                "https://cip.gov.ua/services/cm/api/attachment/download?id="
         ).trim().concat(this.id);
         this.uriCGUPrescript = URI.create(this.urlPrescript);
         this.urlCGUPrescript = uriCGUPrescript.toURL();
@@ -46,6 +57,15 @@ public class jGetPrescript {
 
     }
 
+    /**
+     * Із зчитаного переліка доменів в "хрін знає якому вигляді" (перепрошую за
+     * емоції, але…) формуємо перелік доменів для блокування, за який не
+     * соромно. Домени, що містять відмінні від латинки символи, перекодуються в
+     * idn. На початку доменів прибираємо www та ftp (www зустрічається часто
+     * (хм…), а ftp так, про всяк випадок, мало що…).
+     *
+     * @return
+     */
     public String[] getBodyPrescript() {
         StringBuilder sb = new StringBuilder();
         for (String s : this.bodyPrescript.split("\n")) {
@@ -58,7 +78,7 @@ public class jGetPrescript {
                 domain = uri.getHost();
             }
 
-            domain = domain.replaceAll("^www\\.", "");
+            domain = domain.replaceAll("^www\\.", "").replaceAll("^ftp\\.", "");
             sb.append(domain).append("\n");
         }
         return sb.toString().split("\n");

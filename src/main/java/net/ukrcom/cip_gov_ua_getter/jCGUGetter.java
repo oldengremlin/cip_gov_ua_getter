@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
+ * Клас реалізує зчитування розпоряджень щодо блокування доменів через API.
  *
  * @author olden
  */
@@ -27,10 +28,18 @@ public class jCGUGetter {
     protected final URLConnection conCGU;
     protected String jsonBodyArticles;
 
+    /**
+     * Конструктор класа. Підключаємося до API і зчитуємо отримані дані,
+     * формуючи з них правильний JSON, для подальшого аналізу.
+     *
+     * @param p - об'єкт властивостей.
+     * @throws MalformedURLException
+     * @throws IOException
+     */
     public jCGUGetter(Properties p) throws MalformedURLException, IOException {
         this.urlArticles = p.getProperty(
                 "urlArticles",
-                "https://cip.gov.ua/services/cm/api/articles"
+                "https://cip.gov.ua/services/cm/api/articles?page=0&size=1000&tagId=60751"
         ).trim();
         this.uriCGU = URI.create(this.urlArticles);
         this.urlCGU = uriCGU.toURL();
@@ -64,6 +73,11 @@ public class jCGUGetter {
         }
     }
 
+    /**
+     * Повертає зчитаний JSON, для подальшого аналізу.
+     *
+     * @return
+     */
     public String getJsonBody() {
         return this.jsonBodyArticles;
     }

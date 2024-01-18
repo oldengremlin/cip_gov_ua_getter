@@ -22,6 +22,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
+ * Один з "роочих класів", який формує перелік об'єктів (доменів), що підлягають
+ * блокуванню.
  *
  * @author olden
  */
@@ -33,6 +35,11 @@ public class jBlockedObjects {
     private final String blockedResultName;
     TreeSet<jBlockedDomain> blockedDomains;
 
+    /**
+     * Конструктор класа.
+     *
+     * @param p - об'єкт властивостей.
+     */
     public jBlockedObjects(Properties p) {
         try {
             this.currentPath = new java.io.File(".").getCanonicalPath();
@@ -48,11 +55,21 @@ public class jBlockedObjects {
         );
     }
 
+    /**
+     * Зчитуємо перелік доменів з файлів. Зберігає їх перелік в TreeSet. Так як
+     * це перелік файлів, які були визначені для блокування до відповідного
+     * розпорядження НКРЗІ по відстеженню, то дата для них буде початком епохи
+     * (реалізовано у відповідному конструкторі класа jBlockedDomain).
+     *
+     * @return
+     * @throws MalformedURLException
+     * @throws IOException
+     */
     public jBlockedObjects getBlockedDomainNames() throws MalformedURLException, IOException {
 
         for (String blockedName : blockedNames) {
 
-            File blockedFile = new File(blockedName);
+            File blockedFile = new File(blockedName.trim());
             if (blockedFile.exists() && blockedFile.isFile() && blockedFile.canRead()) {
                 System.err.println(LocalDateTime.now().toString().concat(" ").concat(
                         "Reading ".concat(blockedName)
@@ -72,10 +89,23 @@ public class jBlockedObjects {
         return this;
     }
 
+    /**
+     * Додаємо об'єкт блокуємого домена в перелік.
+     *
+     * @param bdn
+     * @return
+     */
     public boolean addBlockedDomainName(jBlockedDomain bdn) {
         return this.blockedDomains.add(bdn);
     }
 
+    /**
+     * Зберігаємо перелік доменів в вихідному файлі.
+     *
+     * @return
+     * @throws UnsupportedEncodingException
+     * @throws FileNotFoundException
+     */
     public jBlockedObjects storeState() throws UnsupportedEncodingException, FileNotFoundException {
 
         TreeSet<String> blockedDomainsResultList = new TreeSet<>();
@@ -90,7 +120,7 @@ public class jBlockedObjects {
         try (PrintWriter pw = new PrintWriter(
                 new OutputStreamWriter(
                         new FileOutputStream(
-                                this.blockedResultName
+                                this.blockedResultName.trim()
                         ),
                         "UTF-8"
                 )

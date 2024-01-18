@@ -9,6 +9,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
+ * Клас, що розбирає JSON з переліком розпоряджень.
  *
  * @author olden
  */
@@ -17,11 +18,23 @@ public class jParseCGUArticlesJson {
     protected final JSONObject json;
     protected final JSONArray posts;
 
+    /**
+     * Конструктор класа. Розбираємо сформований JSON з розпорядженнями.
+     *
+     * @param json_data
+     * @throws JSONException
+     */
     public jParseCGUArticlesJson(String json_data) throws JSONException {
         this.json = new JSONObject(json_data);
         this.posts = json.getJSONArray("posts");
     }
 
+    /**
+     * Повертаємо масив з розібраними й відокремленими один від одного
+     * розпорядженнями, для подальшого аналізу.
+     *
+     * @return @throws JSONException
+     */
     public JSONArray getPosts() throws JSONException {
         return this.posts;
     }

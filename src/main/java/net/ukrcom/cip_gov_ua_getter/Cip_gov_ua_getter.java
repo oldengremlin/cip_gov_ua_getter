@@ -20,9 +20,28 @@ import org.json.JSONObject;
  */
 public class Cip_gov_ua_getter {
 
+    /**
+     * Основний процес. Це не якийсь там GUI, а проста консольна утиліта, тому
+     * все просто.
+     *
+     * @param args
+     */
     public static void main(String[] args) {
         try {
 
+            /*
+            В cip.gov.ua.properties має описуватися всього декілька ключових опцій:
+            urlArticles - це, так би мовити, основний шлях до новин по блокуванню,
+            що реалізує API який видає нам перелік "новин" в форматі JSON;
+            urlPrescript - а тут міститься частина url для завантаження text/plain
+            переліку доменів для блокування;
+            blocked - перелік локальних файлів, в яких міститься перелік блокуємих
+            доменів. Файлій може бути декілька, в такому випадку вони перераховуються
+            через ";";
+            blocked_result - а сюди записуємо сформований перелік доменів для
+            блокування. При цьому назва може збігатися (а може не збігатися) з
+            назвою того чи іншого файлу з опції blocked.
+             */
             Properties prop = new Properties();
             try (InputStream input = new FileInputStream("cip.gov.ua.properties")) {
                 prop.load(input);
@@ -38,6 +57,11 @@ public class Cip_gov_ua_getter {
             for (int i = 0; i < posts.length(); i++) {
                 JSONObject post = (JSONObject) posts.get(i);
 
+                /* 
+                Ігноруємо всі новини, що не містять статусу PUBLISHED. В принципі
+                таких не було виявлено, але може ж бути що завгодно. Тому й введено
+                цю перевірку.
+                 */
                 if (!post.getString("status").equalsIgnoreCase("PUBLISHED")) {
                     System.err.println(
                             LocalDateTime.now().toString().concat(" ").concat(
@@ -49,6 +73,12 @@ public class Cip_gov_ua_getter {
                     continue;
                 }
 
+                /*
+                Геніальність розробників переліку розпоряджень полягає в тому, що
+                через API дізнатися статус розпорядження - блокування чи розблокування
+                неможливо, тому аналізуємо title повідомлення і визначаємося з
+                дією, яку від нас вимагає розпорядження.
+                 */
                 if (!post.getString("title").matches(".*блокування.*")) {
                     System.err.println(
                             LocalDateTime.now().toString().concat(" ").concat(
@@ -65,6 +95,13 @@ public class Cip_gov_ua_getter {
                     block = false;
                 }
 
+                /*
+                Аналізуємо перелік прикріплених до розпорядження файлів.
+                Якщо це не text/plain то в err виводимо назву файла і навіть не
+                намагаємося його обробити.
+                Якщо це text/plain то в out виводимо назву файла, зчитуємо та
+                обробляємо перелік доменів в ньому.
+                 */
                 JSONArray postAttachments = post.getJSONArray("attachments");
                 for (int j = 0; j < postAttachments.length(); j++) {
 
@@ -102,6 +139,9 @@ public class Cip_gov_ua_getter {
                     }
                 }
             }
+            /*
+            Ну й наша мета - формуємо вихідний файл.
+             */
             bo.storeState();
         } catch (IOException | JSONException ex) {
             Logger.getLogger(Cip_gov_ua_getter.class.getName()).log(Level.SEVERE, null, ex);
