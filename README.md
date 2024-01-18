@@ -32,6 +32,8 @@ DNS.
 контроль за роботою якого НКРЗІ залишає за собою. Це нагадує: не знаємо
 як, але не так! Є розпорядження - виконуйте! Як? Та хто ж вам скаже…
 
+Матеріали трохи не по основній темі, але для нотатків.
+------------------------------------------------------
 
--   <a href="https://www.digitalocean.com/community/tutorials/jackson-json-java-parser-api-example-tutorial" class="uri">https://www.digitalocean.com/community/tutorials/jackson-json-java-parser-api-example-tutorial</a>
--   <a href="https://javarevisited.blogspot.com/2022/03/3-examples-to-parse-json-in-java-using.html" class="uri">https://javarevisited.blogspot.com/2022/03/3-examples-to-parse-json-in-java-using.html</a>
+- [ ] <a href="https://www.digitalocean.com/community/tutorials/jackson-json-java-parser-api-example-tutorial" class="uri">https://www.digitalocean.com/community/tutorials/jackson-json-java-parser-api-example-tutorial</a>
+- [ ] <a href="https://javarevisited.blogspot.com/2022/03/3-examples-to-parse-json-in-java-using.html" class="uri">https://javarevisited.blogspot.com/2022/03/3-examples-to-parse-json-in-java-using.html</a>
