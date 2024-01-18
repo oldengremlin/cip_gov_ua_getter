@@ -27,5 +27,6 @@ replay_pid*
 
 .gitignore
 blocked.*
+*.sh
 *.~
 *~
