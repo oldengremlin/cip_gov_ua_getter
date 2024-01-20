@@ -62,6 +62,7 @@
                 </configuration>
             </plugin>
             <!-- https://github.com/khmarbaise/uptodate-maven-plugin -->
+            <!--
             <plugin>
                 <groupId>com.soebes.maven.plugins</groupId>
                 <artifactId>uptodate-maven-plugin</artifactId>
@@ -76,7 +77,8 @@
                     </execution>
                 </executions>
             </plugin>
-            <!--
+            -->
+
                         <plugin>
                             <groupId>com.soebes.maven.plugins</groupId>
                             <artifactId>uptodate-maven-plugin</artifactId>
@@ -90,7 +92,6 @@
                                 </execution>
                             </executions>
                         </plugin>
-            -->
         </plugins>
     </build>
 </project>
