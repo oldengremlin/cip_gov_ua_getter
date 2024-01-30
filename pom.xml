@@ -8,7 +8,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <exec.mainClass>net.ukrcom.cip_gov_ua_getter.Cip_gov_ua_getter</exec.mainClass>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.release>16</maven.compiler.release>
     </properties>
     <dependencies>
         <!-- https://mvnrepository.com/artifact/org.json/org.json -->
