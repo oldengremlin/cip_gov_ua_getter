@@ -107,7 +107,7 @@ public class Cip_gov_ua_getter {
 
                     JSONObject attachment = (JSONObject) postAttachments.get(j);
                     String id = Integer.toString(attachment.getInt("id"));
-                    new jGetPrescript(prop, id).storePrescriptTo(attachment.getString("originalFileName"));
+                    jGetPrescript jgp = new jGetPrescript(prop, id).storePrescriptTo(attachment.getString("originalFileName"));
 
                     if (!attachment.getString("mimeType").equalsIgnoreCase("text/plain")) {
                         System.err.println(
@@ -123,7 +123,7 @@ public class Cip_gov_ua_getter {
                         continue;
                     }
 
-                    for (String domain : new jGetPrescript(prop, id).getBodyPrescript()) {
+                    for (String domain : jgp.getBodyPrescript()) {
                         jBlockedDomain bd = new jBlockedDomain(domain, block, post.getString("date"));
                         if (bo.addBlockedDomainName(bd)) {
                             System.out.println(

@@ -102,11 +102,15 @@ public class jGetPrescript {
         return sb.toString().split("\n");
     }
 
+    /**
+     * Зберігає копію розпорядження від НЦУ.
+     *
+     * @param fn - ім'я файла-розпорядження
+     * @return
+     */
     public jGetPrescript storePrescriptTo(String fn) {
         if (this.mkdir() && !this.isEsists(fn)) {
             try {
-                System.err.println("Get from " + this.urlPrescript + " and store to " + this.storePrescriptTo + this.id + "~" + fn);
-
                 URL url = URI.create(this.urlPrescript).toURL();
                 try (ReadableByteChannel rbc = Channels.newChannel(url.openStream()); FileOutputStream fos = new FileOutputStream(storePrescriptTo + this.id + "~" + fn)) {
                     fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
