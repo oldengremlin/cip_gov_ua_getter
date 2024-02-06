@@ -112,6 +112,8 @@ public class jGetPrescript {
         if (this.mkdir() && !this.isEsists(fn)) {
             try {
                 URL url = URI.create(this.urlPrescript).toURL();
+
+                // https://www.digitalocean.com/community/tutorials/java-download-file-url
                 try (ReadableByteChannel rbc = Channels.newChannel(url.openStream()); FileOutputStream fos = new FileOutputStream(storePrescriptTo + this.id + "~" + fn)) {
                     fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
                 } catch (IOException ex) {
