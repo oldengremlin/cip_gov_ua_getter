@@ -107,6 +107,8 @@ public class Cip_gov_ua_getter {
 
                     JSONObject attachment = (JSONObject) postAttachments.get(j);
                     String id = Integer.toString(attachment.getInt("id"));
+                    new jGetPrescript(prop, id).storePrescriptTo(attachment.getString("originalFileName"));
+
                     if (!attachment.getString("mimeType").equalsIgnoreCase("text/plain")) {
                         System.err.println(
                                 LocalDateTime.now().toString().concat(" ").concat(
