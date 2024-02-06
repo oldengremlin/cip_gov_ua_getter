@@ -109,7 +109,7 @@ public class jGetPrescript {
      * @return
      */
     public jGetPrescript storePrescriptTo(String fn) {
-        if (this.mkDir() && !this.isEsists(fn)) {
+        if (this.mkDir() && !this.isExists(fn)) {
             try {
                 URL url = URI.create(this.urlPrescript).toURL();
 
@@ -134,7 +134,7 @@ public class jGetPrescript {
         return md.mkdirs();
     }
 
-    protected boolean isEsists(String fn) {
+    protected boolean isExists(String fn) {
         File f = new File(this.storePrescriptTo + this.id + "~" + fn);
         return f.exists() && f.canRead() && f.canWrite();
     }
