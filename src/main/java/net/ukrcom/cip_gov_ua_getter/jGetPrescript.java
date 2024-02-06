@@ -71,14 +71,18 @@ public class jGetPrescript {
         for (String s : this.bodyPrescript.split("\n")) {
             String domain = IDN.toASCII(
                     s.replaceAll("\s+", "")
-            ).toLowerCase().trim();
+            ).toLowerCase()
+                    .trim()
+                    .replaceAll("^[^:]+://", "")
+                    .replaceAll("^www\\.", "")
+                    .replaceAll("^ftp\\.", "")
+                    .replaceAll("/.*", "");
 
             URI uri = URI.create(domain);
             if (uri.getHost() != null) {
                 domain = uri.getHost();
             }
 
-            domain = domain.replaceAll("^www\\.", "").replaceAll("^ftp\\.", "");
             sb.append(domain).append("\n");
         }
         return sb.toString().split("\n");
