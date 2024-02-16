@@ -97,7 +97,7 @@ public class jGetPrescript {
                 domain = uri.getHost();
             }
 
-            if (domain.length() > 0 && !domain.isBlank() && !domain.isEmpty()) {
+            if (!domain.isBlank() && !domain.isEmpty() && domain.length() > 0) {
                 sb.append(domain).append("\n");
             }
         }
