@@ -46,6 +46,9 @@ public class jCGUGetter {
         this.urlCGU = uriCGU.toURL();
         this.conCGU = urlCGU.openConnection();
 
+        /**
+         * * *
+         */
 //        HttpURLConnection con = (HttpURLConnection) urlCGU.openConnection();
 //        con.setDoOutput(true);
 //        con.setRequestMethod("GET");
@@ -83,11 +86,16 @@ public class jCGUGetter {
 //            System.out.println("GET request did not work.");
 //        }
 //        con.disconnect();
-
-        this.conCGU.setDoOutput(true);
+        /**
+         * * *
+         */
+//        this.conCGU.setDoOutput(true);
         this.conCGU.setRequestProperty("Accept-Encoding", "deflate");
         this.conCGU.setRequestProperty("Accept-Language", "uk");
-        System.out.println(this.conCGU.getHeaderFields());
+        this.conCGU.setRequestProperty("Host", "cip.gov.ua");
+        this.conCGU.setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0");
+        this.conCGU.setRequestProperty("Upgrade-Insecure-Requests", "1");
+        System.err.println(this.conCGU.getHeaderFields());
         try (Stream<String> lines = new BufferedReader(
                 new InputStreamReader(this.conCGU.getInputStream()))
                 .lines()) {
@@ -98,6 +106,7 @@ public class jCGUGetter {
                     .trim();
              */
             this.jsonBodyArticles = "{ posts: ".concat(lines.collect(Collectors.joining("\n"))).concat("}");
+            System.err.println(this.jsonBodyArticles);
         }
     }
 
