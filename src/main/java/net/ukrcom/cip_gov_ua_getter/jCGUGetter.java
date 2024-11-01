@@ -47,7 +47,9 @@ public class jCGUGetter {
         this.conCGU = urlCGU.openConnection();
 
         /**
-         * * *
+         *
+         * https://www.digitalocean.com/community/tutorials/java-httpurlconnection-example-java-http-request-get-post
+         *
          */
 //        HttpURLConnection con = (HttpURLConnection) urlCGU.openConnection();
 //        con.setDoOutput(true);
