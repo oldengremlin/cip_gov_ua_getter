@@ -121,19 +121,19 @@ public class jGetPrescript {
         if (this.mkDir() && !this.isExists(fn)) {
             try {
                 URL url = URI.create(this.urlPrescript).toURL();
-                
-//                url.openConnection().setRequestProperty("Accept-Encoding", "deflate");
-//                url.openConnection().setRequestProperty("Accept-Language", "uk");
-//                url.openConnection().setRequestProperty("Host", "cip.gov.ua");
-//                url.openConnection().setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0");
-//                url.openConnection().setRequestProperty("Upgrade-Insecure-Requests", "1");
+                URLConnection oCon = url.openConnection();
+                url.openConnection().setRequestProperty("Accept-Encoding", "deflate");
+                url.openConnection().setRequestProperty("Accept-Language", "uk");
+                url.openConnection().setRequestProperty("Host", "cip.gov.ua");
+                url.openConnection().setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0");
+                url.openConnection().setRequestProperty("Upgrade-Insecure-Requests", "1");
 
-                // https://www.digitalocean.com/community/tutorials/java-download-file-url
-                try (ReadableByteChannel rbc = Channels.newChannel(url.openStream()); FileOutputStream fos = new FileOutputStream(storePrescriptTo + this.id + "~" + fn)) {
-                    fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
-                } catch (IOException ex) {
-                    Logger.getLogger(jGetPrescript.class.getName()).log(Level.SEVERE, null, ex);
-                }
+//                // https://www.digitalocean.com/community/tutorials/java-download-file-url
+//                try (ReadableByteChannel rbc = Channels.newChannel(url.openStream()); FileOutputStream fos = new FileOutputStream(storePrescriptTo + this.id + "~" + fn)) {
+//                    fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+//                } catch (IOException ex) {
+//                    Logger.getLogger(jGetPrescript.class.getName()).log(Level.SEVERE, null, ex);
+//                }
             } catch (MalformedURLException ex) {
                 Logger.getLogger(jGetPrescript.class.getName()).log(Level.SEVERE, null, ex);
             } catch (IOException ex) {
