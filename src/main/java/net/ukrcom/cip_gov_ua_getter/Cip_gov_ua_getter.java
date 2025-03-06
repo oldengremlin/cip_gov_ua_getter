@@ -79,17 +79,28 @@ public class Cip_gov_ua_getter {
                 неможливо, тому аналізуємо title повідомлення і визначаємося з
                 дією, яку від нас вимагає розпорядження.
                  */
-                if (!post.getString("title").matches(".*блокування.*")) {
-                    if (!post.getString("title").matches(".*обмеження доступу до ресурсів Інтернету.*")) {
-                        System.err.println(
-                                LocalDateTime.now().toString().concat(" ").concat(
-                                        post.getString("date")
-                                                .concat(" : ")
-                                                .concat(post.getString("title"))
-                                )
-                        );
-                        continue;
-                    }
+//                if (!post.getString("title").matches(".*блокування.*")) {
+//                    if (!post.getString("title").matches(".*обмеження доступу до ресурсів Інтернету.*")) {
+//                        System.err.println(
+//                                LocalDateTime.now().toString().concat(" ").concat(
+//                                        post.getString("date")
+//                                                .concat(" : ")
+//                                                .concat(post.getString("title"))
+//                                )
+//                        );
+//                        continue;
+//                    }
+//                }
+                if (!(post.getString("title").matches(".*блокування.*")
+                        || post.getString("title").matches(".*обмеження доступу до ресурсів Інтернету.*"))) {
+                    System.err.println(
+                            LocalDateTime.now().toString().concat(" ").concat(
+                                    post.getString("date")
+                                            .concat(" : ")
+                                            .concat(post.getString("title"))
+                            )
+                    );
+                    continue;
                 }
 
                 boolean block = true;
