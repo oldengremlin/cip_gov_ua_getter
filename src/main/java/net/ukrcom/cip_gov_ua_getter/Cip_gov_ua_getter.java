@@ -92,7 +92,7 @@ public class Cip_gov_ua_getter {
 //                    }
 //                }
                 if (!(post.getString("title").matches(".*блокування.*")
-                        || post.getString("title").matches(".*обмеження доступу до ресурсів Інтернету.*"))) {
+                        || post.getString("title").matches(".*обмеження доступу.*"))) {
                     System.err.println(
                             LocalDateTime.now().toString().concat(" ").concat(
                                     post.getString("date")
@@ -104,7 +104,8 @@ public class Cip_gov_ua_getter {
                 }
 
                 boolean block = true;
-                if (post.getString("title").matches(".*розблокування.*")) {
+                if (post.getString("title").matches(".*розблокування.*")
+                        || post.getString("title").matches(".*припинення тимчасового.*")) {
                     block = false;
                 }
 
