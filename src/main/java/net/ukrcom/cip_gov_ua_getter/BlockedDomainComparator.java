@@ -19,6 +19,20 @@ public class BlockedDomainComparator implements Comparator {
 
     @Override
     public int compare(Object o1, Object o2) {
+        BlockedDomain d1 = (BlockedDomain) o1;
+        BlockedDomain d2 = (BlockedDomain) o2;
+        int compare = d1.getDomainName().compareTo(d2.getDomainName());
+        if (compare != 0) {
+            return compare;
+        }
+        compare = d1.getDateTime().compareTo(d2.getDateTime());
+        if (compare != 0) {
+            return compare;
+        }
+        return Boolean.compare(d1.getIsBlocked(), d2.getIsBlocked());
+    }
+    /*
+    public int compare(Object o1, Object o2) {
 
         int retVal = 0;
 
@@ -47,4 +61,6 @@ public class BlockedDomainComparator implements Comparator {
 
         return retVal;
     }
+     */
+
 }

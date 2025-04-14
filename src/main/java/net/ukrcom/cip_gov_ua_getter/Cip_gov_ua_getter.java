@@ -67,6 +67,11 @@ public class Cip_gov_ua_getter {
             ParseCGUArticlesJson parseCGUArticlesJson = new ParseCGUArticlesJson(cguGetter.getJsonBody());
 
             JSONArray posts = parseCGUArticlesJson.getPosts();
+            if (posts.isEmpty()) {
+                logger.warn("No posts found in JSON response");
+                bo.storeState();
+                return;
+            }
             for (int i = 0; i < posts.length(); i++) {
                 JSONObject post = posts.getJSONObject(i);
                 String title = post.getString("title");

@@ -14,6 +14,7 @@ import java.net.IDN;
 import java.util.Properties;
 import com.microsoft.playwright.*;
 import java.util.Map;
+import java.util.HashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,24 @@ public class GetPrescript {
     protected String storePrescriptTo;
     private final String userAgent;
     private final String secChUa;
+
+    // Таблиця гомогліфів для заміни на латинські символи
+    private static final Map<Character, Character> HOMOGRAPHS = new HashMap<>();
+    static {
+        HOMOGRAPHS.put('а', 'a'); // кирилична а → латинська a
+        HOMOGRAPHS.put('о', 'o'); // кирилична о → латинська o
+        HOMOGRAPHS.put('е', 'e'); // кирилична е → латинська e
+        HOMOGRAPHS.put('і', 'i'); // кирилична і → латинська i
+        HOMOGRAPHS.put('с', 'c'); // кирилична с → латинська c
+        HOMOGRAPHS.put('р', 'p'); // кирилична р → латинська p
+        HOMOGRAPHS.put('у', 'y'); // кирилична у → латинська y
+        HOMOGRAPHS.put('к', 'k'); // кирилична к → латинська k
+        HOMOGRAPHS.put('х', 'x'); // кирилична х → латинська x
+        HOMOGRAPHS.put('А', 'A'); // кирилична А → латинська A
+        HOMOGRAPHS.put('О', 'O'); // кирилична О → латинська O
+        HOMOGRAPHS.put('Е', 'E'); // кирилична Е → латинська E
+        // Додайте інші гомогліфи за потреби
+    }
 
     /**
      * Конструктор класа. Зчитує перелік доменів для блокування з прикріпленого
@@ -136,10 +155,10 @@ public class GetPrescript {
 
     /**
      * Із зчитаного переліка доменів формуємо перелік доменів для блокування.
-     * Домени, що містять відмінні від латинки символи, перекодуються в idn. На
-     * початку доменів прибираємо www та ftp.
+     * Домени, що містять відмінні від латинки символи, перекодуються в idn.
+     * Додаємо також латинізовані версії доменів із заміненими гомогліфами.
      *
-     * @return
+     * @return масив валідних доменів (IDN і латинізованих)
      */
     public String[] getBodyPrescript() {
         if (bodyPrescript.length() > 10_000_000) { // 10 МБ
@@ -163,15 +182,29 @@ public class GetPrescript {
             }
 
             try {
-                String domain = IDN.toASCII(cleaned, IDN.ALLOW_UNASSIGNED);
-
-                if (domainValidator.isValid(domain)) {
-                    sb.append(domain).append("\n");
-                    logger.info("Valid domain: {}", domain);
+                // Оригінальний домен у форматі IDN
+                String idnDomain = IDN.toASCII(cleaned, IDN.ALLOW_UNASSIGNED);
+                if (domainValidator.isValid(idnDomain)) {
+                    sb.append(idnDomain).append("\n");
+                    logger.info("Valid IDN domain: {}", idnDomain);
                 } else if (ipValidator.isValid(cleaned)) {
                     logger.warn("Skipping IP address: {}", cleaned);
+                    continue;
                 } else {
-                    logger.warn("Invalid entry: {}", cleaned);
+                    logger.warn("Invalid IDN domain: {}", cleaned);
+                    continue;
+                }
+
+                // Генерація латинізованого домену
+                String latinized = latinizeDomain(cleaned);
+                if (!latinized.equals(cleaned)) { // Якщо є гомогліфи
+                    String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED);
+                    if (domainValidator.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
+                        sb.append(latinizedIdn).append("\n");
+                        logger.info("Valid latinized domain: {} (from {})", latinizedIdn, cleaned);
+                    } else {
+                        logger.debug("Latinized domain invalid or identical: {} (from {})", latinized, cleaned);
+                    }
                 }
             } catch (IllegalArgumentException e) {
                 logger.warn("Failed to process: {} ({})", cleaned, e.getMessage());
@@ -179,6 +212,20 @@ public class GetPrescript {
         }
 
         return sb.length() > 0 ? sb.toString().split("\n") : new String[0];
+    }
+
+    /**
+     * Замінює гомогліфи в домені на латинські еквіваленти.
+     *
+     * @param domain домен для обробки
+     * @return латинізований домен
+     */
+    private String latinizeDomain(String domain) {
+        StringBuilder latinized = new StringBuilder();
+        for (char c : domain.toCharArray()) {
+            latinized.append(HOMOGRAPHS.getOrDefault(c, c));
+        }
+        return latinized.toString();
     }
 
     /**

@@ -3,6 +3,7 @@ package net.ukrcom.cip_gov_ua_getter;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 /*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
@@ -46,9 +47,12 @@ public class BlockedDomain {
     public BlockedDomain(String dn, boolean b, String s) {
         this.domainName = dn;
         this.isBlocked = b;
+        /*
         this.dateTime = LocalDateTime.parse(
                 s.replaceAll("Z$", "")
         );
+         */
+        this.dateTime = LocalDateTime.parse(s, DateTimeFormatter.ISO_DATE_TIME);
     }
 
     /**
