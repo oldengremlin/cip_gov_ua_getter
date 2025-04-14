@@ -12,6 +12,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.TreeSet;
 import org.slf4j.Logger;
@@ -23,6 +26,7 @@ import org.slf4j.LoggerFactory;
  * @author olden
  */
 public class BlockedObjects {
+
     private static final Logger logger = LoggerFactory.getLogger(BlockedObjects.class);
 
     protected String currentPath; // Current dir
@@ -50,13 +54,14 @@ public class BlockedObjects {
     }
 
     /**
-     * Зчитує перелік доменів із файлів, указаних у властивості blocked.
-     * Додає їх до TreeSet із датою за замовчуванням (початок епохи).
+     * Зчитує перелік доменів із файлів, указаних у властивості blocked. Додає
+     * їх до TreeSet із датою за замовчуванням (початок епохи).
      *
      * @return цей об'єкт для ланцюгових викликів
      * @throws IOException у разі помилок читання файлів
      */
     public BlockedObjects getBlockedDomainNames() throws IOException {
+        /*
         for (String blockedName : blockedNames) {
             File blockedFile = new File(blockedName.trim());
             if (blockedFile.exists() && blockedFile.isFile() && blockedFile.canRead()) {
@@ -70,6 +75,20 @@ public class BlockedObjects {
                         }
                     }
                 }
+            } else {
+                logger.warn("File {} does not exist or is not readable", blockedName);
+            }
+        }
+        return this;
+         */
+        for (String blockedName : blockedNames) {
+            File blockedFile = new File(blockedName.trim());
+            if (blockedFile.exists() && blockedFile.isFile() && blockedFile.canRead()) {
+                logger.info("Reading blocked domains from {}", blockedName);
+                Files.lines(Paths.get(blockedFile.getPath()), StandardCharsets.UTF_8)
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty())
+                        .forEach(line -> this.addBlockedDomainName(new BlockedDomain(line)));
             } else {
                 logger.warn("File {} does not exist or is not readable", blockedName);
             }
