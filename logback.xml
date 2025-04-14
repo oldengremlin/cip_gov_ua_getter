@@ -1,4 +1,5 @@
 <configuration>
+    <!-- Рівень логування можна змінити на DEBUG через аргумент --debug або -d -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>

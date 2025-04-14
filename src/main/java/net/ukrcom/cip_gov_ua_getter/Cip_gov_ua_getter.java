@@ -13,6 +13,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ch.qos.logback.classic.Level;
 
 /**
  * Консольна утиліта для збору та обробки розпоряджень про блокування доменів.
@@ -26,19 +27,40 @@ public class Cip_gov_ua_getter {
     /**
      * Основний процес.
      *
-     * @param args аргументи командного рядка (не використовуються)
+     * @param args аргументи командного рядка: шлях до cip.gov.ua.properties
+     * (опціонально), --debug або -d для вмикання дебаг-логів
      */
     public static void main(String[] args) {
+        // Налаштування дебаг-логування
+        boolean debug = false;
+        String configPath = "cip.gov.ua.properties";
+
+        for (String arg : args) {
+            if (arg.equals("--debug") || arg.equals("-d")) {
+                debug = true;
+            } else if (!arg.isEmpty()) {
+                configPath = arg;
+            }
+        }
+
+        if (debug) {
+            ch.qos.logback.classic.Logger rootLogger
+                    = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+            rootLogger.setLevel(Level.DEBUG);
+            logger.debug("Debug logging enabled");
+        }
+
         try {
             // Завантаження конфігурації
             Properties prop = new Properties();
-            String configPath = args.length > 0 ? args[0] : "cip.gov.ua.properties";
             try (InputStream input = new FileInputStream(configPath)) {
                 prop.load(input);
+                logger.debug("Loaded configuration from: {}", configPath);
             } catch (IOException e) {
                 logger.error("Failed to load config from {}: {}", configPath, e.getMessage(), e);
                 throw new RuntimeException("Failed to load config", e);
             }
+
             BlockedObjects bo = new BlockedObjects(prop).getBlockedDomainNames();
 
             CGUGetter cguGetter = new CGUGetter(prop);
