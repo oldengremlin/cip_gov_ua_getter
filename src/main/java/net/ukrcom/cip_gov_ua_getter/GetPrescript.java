@@ -148,9 +148,27 @@ public class GetPrescript {
     }
 
     /**
+     * Витягує TLD із домену.
+     *
+     * @param domain - повне ім'я домену
+     * @return TLD (наприклад, ".com") або null, якщо не вдалося визначити
+     */
+    private String extractTld(String domain) {
+        if (domain == null || domain.isEmpty()) {
+            return null;
+        }
+        int lastDot = domain.lastIndexOf('.');
+        if (lastDot == -1 || lastDot == domain.length() - 1) {
+            return null;
+        }
+        return domain.substring(lastDot);
+    }
+
+    /**
      * Із зчитаного переліка доменів формуємо перелік доменів для блокування.
      * Домени, що містять відмінні від латинки символи, перекодуються в idn.
-     * Додаємо також латинізовані версії доменів із заміненими гомогліфами за допомогою icu4j.
+     * Додаємо також латинізовані версії доменів із заміненими гомогліфами за
+     * допомогою icu4j.
      *
      * @return масив валідних доменів (IDN і латинізованих)
      */
@@ -180,8 +198,9 @@ public class GetPrescript {
                 // Оригінальний домен у форматі IDN
                 String idnDomain = IDN.toASCII(cleaned, IDN.ALLOW_UNASSIGNED);
                 if (domainValidator.isValid(idnDomain)) {
-                    if (!domainValidator.isValidTld(idnDomain)) {
-                        logger.warn("Invalid TLD for domain: {}", idnDomain);
+                    String tld = extractTld(idnDomain);
+                    if (tld == null || !domainValidator.isValidTld(tld)) {
+                        logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
                         continue;
                     }
                     sb.append(idnDomain).append("\n");
@@ -200,8 +219,9 @@ public class GetPrescript {
                     String latinized = SKELETON_CACHE.computeIfAbsent(cleaned, SPOOF_CHECKER::getSkeleton);
                     String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED);
                     if (domainValidator.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
-                        if (!domainValidator.isValidTld(latinizedIdn)) {
-                            logger.warn("Invalid TLD for latinized domain: {}", latinizedIdn);
+                        String latinizedTld = extractTld(latinizedIdn);
+                        if (latinizedTld == null || !domainValidator.isValidTld(latinizedTld)) {
+                            logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
                             continue;
                         }
                         sb.append(latinizedIdn).append("\n");
