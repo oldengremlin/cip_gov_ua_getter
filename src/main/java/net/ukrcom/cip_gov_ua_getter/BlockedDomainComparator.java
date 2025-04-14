@@ -15,15 +15,15 @@ import java.util.Comparator;
  *
  * @author olden
  */
-public class jBlockedDomainComparator implements Comparator {
+public class BlockedDomainComparator implements Comparator {
 
     @Override
     public int compare(Object o1, Object o2) {
 
         int retVal = 0;
 
-        jBlockedDomain d1 = (jBlockedDomain) o1;
-        jBlockedDomain d2 = (jBlockedDomain) o2;
+        BlockedDomain d1 = (BlockedDomain) o1;
+        BlockedDomain d2 = (BlockedDomain) o2;
         int compareTo = d1.getDomainName().compareTo(d2.getDomainName());
         compareTo = (compareTo > 0 ? 1 : (compareTo < 0 ? -1 : 0));
 

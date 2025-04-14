@@ -13,7 +13,7 @@ import org.json.JSONObject;
  *
  * @author olden
  */
-public class jParseCGUArticlesJson {
+public class ParseCGUArticlesJson {
 
     protected final JSONObject json;
     protected final JSONArray posts;
@@ -24,7 +24,7 @@ public class jParseCGUArticlesJson {
      * @param json_data
      * @throws JSONException
      */
-    public jParseCGUArticlesJson(String json_data) throws JSONException {
+    public ParseCGUArticlesJson(String json_data) throws JSONException {
         this.json = new JSONObject(json_data);
         this.posts = json.getJSONArray("posts");
     }

@@ -9,12 +9,15 @@ import java.time.ZoneId;
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 /**
- * Основний об'єкт, який описує блокуємий домен та статус того, що з ним треба
- * зробити. Зберігається також дата опублікованого розпорядження.
+ * Конструктор класа.
  *
- * @author olden
+ * @param dn - ім'я домена
+ * @param b - статус операції над доменом (true - блокувати, false -
+ * розблокувати)
+ * @param s - дата в текстовому форматі ISO 8601 (наприклад,
+ * "2023-10-15T12:00:00"), береться з атрибута date
  */
-public class jBlockedDomain {
+public class BlockedDomain {
 
     protected String domainName;
     protected boolean isBlocked;
@@ -27,7 +30,7 @@ public class jBlockedDomain {
      * @param b - статус операції над доменом
      * @param dt - дата в форматі LocalDateTime
      */
-    public jBlockedDomain(String dn, boolean b, LocalDateTime dt) {
+    public BlockedDomain(String dn, boolean b, LocalDateTime dt) {
         this.domainName = dn;
         this.isBlocked = b;
         this.dateTime = dt;
@@ -40,7 +43,7 @@ public class jBlockedDomain {
      * @param b - статус операції над доменом
      * @param s - дата в текстовому форматі. Береться з атрибута date.
      */
-    public jBlockedDomain(String dn, boolean b, String s) {
+    public BlockedDomain(String dn, boolean b, String s) {
         this.domainName = dn;
         this.isBlocked = b;
         this.dateTime = LocalDateTime.parse(
@@ -53,7 +56,7 @@ public class jBlockedDomain {
      *
      * @param dn - ім'я домена
      */
-    public jBlockedDomain(String dn) {
+    public BlockedDomain(String dn) {
         this.domainName = dn;
         this.isBlocked = true;
         this.dateTime = Instant

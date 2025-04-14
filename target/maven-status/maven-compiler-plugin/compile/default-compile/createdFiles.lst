@@ -1,7 +1,7 @@
 net/ukrcom/cip_gov_ua_getter/Cip_gov_ua_getter.class
-net/ukrcom/cip_gov_ua_getter/jGetPrescript.class
-net/ukrcom/cip_gov_ua_getter/jBlockedObjects.class
-net/ukrcom/cip_gov_ua_getter/jParseCGUArticlesJson.class
-net/ukrcom/cip_gov_ua_getter/jBlockedDomainComparator.class
-net/ukrcom/cip_gov_ua_getter/jCGUGetter.class
-net/ukrcom/cip_gov_ua_getter/jBlockedDomain.class
+net/ukrcom/cip_gov_ua_getter/BlockedDomain.class
+net/ukrcom/cip_gov_ua_getter/ParseCGUArticlesJson.class
+net/ukrcom/cip_gov_ua_getter/CGUGetter.class
+net/ukrcom/cip_gov_ua_getter/BlockedDomainComparator.class
+net/ukrcom/cip_gov_ua_getter/GetPrescript.class
+net/ukrcom/cip_gov_ua_getter/BlockedObjects.class

@@ -8,159 +8,105 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.Properties;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
+ * Консольна утиліта для збору та обробки розпоряджень про блокування доменів.
  *
  * @author olden
  */
 public class Cip_gov_ua_getter {
 
+    private static final Logger logger = LoggerFactory.getLogger(Cip_gov_ua_getter.class);
+
     /**
-     * Основний процес. Це не якийсь там GUI, а проста консольна утиліта, тому
-     * все просто.
+     * Основний процес.
      *
-     * @param args
+     * @param args аргументи командного рядка (не використовуються)
      */
     public static void main(String[] args) {
         try {
-
-            /*
-            В cip.gov.ua.properties має описуватися всього декілька ключових опцій:
-            urlArticles - це, так би мовити, основний шлях до новин по блокуванню,
-            що реалізує API який видає нам перелік "новин" в форматі JSON;
-            urlPrescript - а тут міститься частина url для завантаження text/plain
-            переліку доменів для блокування;
-            blocked - перелік локальних файлів, в яких міститься перелік блокуємих
-            доменів. Файлій може бути декілька, в такому випадку вони перераховуються
-            через ";";
-            blocked_result - а сюди записуємо сформований перелік доменів для
-            блокування. При цьому назва може збігатися (а може не збігатися) з
-            назвою того чи іншого файлу з опції blocked.
-             */
+            // Завантаження конфігурації
             Properties prop = new Properties();
-            try (InputStream input = new FileInputStream("cip.gov.ua.properties")) {
+            String configPath = args.length > 0 ? args[0] : "cip.gov.ua.properties";
+            try (InputStream input = new FileInputStream(configPath)) {
                 prop.load(input);
+            } catch (IOException e) {
+                logger.error("Failed to load config from {}: {}", configPath, e.getMessage(), e);
+                throw new RuntimeException("Failed to load config", e);
             }
-            jBlockedObjects bo = new jBlockedObjects(prop).getBlockedDomainNames();
+            BlockedObjects bo = new BlockedObjects(prop).getBlockedDomainNames();
 
-            jCGUGetter cguGetter = new jCGUGetter(prop);
-
-            jParseCGUArticlesJson parseCGUArticlesJson = new jParseCGUArticlesJson(cguGetter.getJsonBody());
-            //HashMap<String, Object> hashMap = new HashMap<>(Utility.jsonToMap(jCGUGetter.getJsonBody()));
+            CGUGetter cguGetter = new CGUGetter(prop);
+            ParseCGUArticlesJson parseCGUArticlesJson = new ParseCGUArticlesJson(cguGetter.getJsonBody());
 
             JSONArray posts = parseCGUArticlesJson.getPosts();
             for (int i = 0; i < posts.length(); i++) {
-                JSONObject post = (JSONObject) posts.get(i);
+                JSONObject post = posts.getJSONObject(i);
+                String title = post.getString("title");
 
-                /* 
-                Ігноруємо всі новини, що не містять статусу PUBLISHED. В принципі
-                таких не було виявлено, але може ж бути що завгодно. Тому й введено
-                цю перевірку.
-                 */
+                // Ігноруємо непубліковані пости
                 if (!post.getString("status").equalsIgnoreCase("PUBLISHED")) {
-                    System.err.println(
-                            LocalDateTime.now().toString().concat(" ").concat(
-                                    post.getString("date")
-                                            .concat(" # ")
-                                            .concat(post.getString("title"))
-                            )
-                    );
+                    logger.warn("Skipping unpublished post: {} - {}", post.getString("date"), title);
                     continue;
                 }
 
-                /*
-                "Геніальність" розробників переліку розпоряджень полягає в тому, що
-                через API дізнатися статус розпорядження - блокування чи розблокування
-                неможливо, тому аналізуємо title повідомлення і визначаємося з
-                дією, яку від нас вимагає розпорядження.
-                 */
-//                if (!post.getString("title").matches(".*блокування.*")) {
-//                    if (!post.getString("title").matches(".*обмеження доступу до ресурсів Інтернету.*")) {
-//                        System.err.println(
-//                                LocalDateTime.now().toString().concat(" ").concat(
-//                                        post.getString("date")
-//                                                .concat(" : ")
-//                                                .concat(post.getString("title"))
-//                                )
-//                        );
-//                        continue;
-//                    }
-//                }
-                if (!(post.getString("title").matches(".*блокування.*")
-                        || post.getString("title").matches(".*обмеження доступу.*"))) {
-                    System.err.println(
-                            LocalDateTime.now().toString().concat(" ").concat(
-                                    post.getString("date")
-                                            .concat(" : ")
-                                            .concat(post.getString("title"))
-                            )
-                    );
+                // Перевіряємо, чи пост стосується блокування/обмеження
+                if (!(title.matches(".*блокування.*") || title.matches(".*обмеження доступу.*"))) {
+                    logger.warn("Skipping unrelated post: {} - {}", post.getString("date"), title);
                     continue;
                 }
 
-                boolean block = true;
-                if (post.getString("title").matches(".*розблокування.*")
-                        || post.getString("title").matches(".*припинення тимчасового.*")) {
-                    block = false;
-                }
+                // Визначаємо дію (блокувати чи розблокувати)
+                boolean block = !title.matches(".*розблокування.*") && !title.matches(".*припинення тимчасового.*");
 
-                /*
-                Аналізуємо перелік прикріплених до розпорядження файлів.
-                Якщо це не text/plain то в err виводимо назву файла і навіть не
-                намагаємося його обробити.
-                Якщо це text/plain то в out виводимо назву файла, зчитуємо та
-                обробляємо перелік доменів в ньому.
-                 */
+                // Обробляємо вкладення
                 JSONArray postAttachments = post.getJSONArray("attachments");
                 for (int j = 0; j < postAttachments.length(); j++) {
+                    JSONObject attachment = postAttachments.getJSONObject(j);
+                    String id = String.valueOf(attachment.getInt("id"));
+                    String mimeType = attachment.getString("mimeType");
+                    String fileName = attachment.getString("originalFileName");
 
-                    JSONObject attachment = (JSONObject) postAttachments.get(j);
-                    String id = Integer.toString(attachment.getInt("id"));
-                    jGetPrescript jgp = new jGetPrescript(prop, id).storePrescriptTo(attachment.getString("originalFileName"));
+                    GetPrescript gp = new GetPrescript(prop, id).storePrescriptTo(fileName);
 
-                    if (!attachment.getString("mimeType").equalsIgnoreCase("text/plain")) {
-                        System.err.println(
-                                LocalDateTime.now().toString().concat(" ").concat(
-                                        post.getString("date")
-                                                .concat(block ? " + " : " - ")
-                                                .concat(id)
-                                                .concat(" \"")
-                                                .concat(attachment.getString("originalFileName"))
-                                                .concat("\"")
-                                )
-                        );
+                    if (!mimeType.equalsIgnoreCase("text/plain")) {
+                        logger.info("{} {} {} {} \"{}\"",
+                                LocalDateTime.now(), post.getString("date"), block ? "+" : "-", id, fileName);
                         continue;
                     }
 
-                    for (String domain : jgp.getBodyPrescript()) {
-                        jBlockedDomain bd = new jBlockedDomain(domain, block, post.getString("date"));
+                    for (String domain : gp.getBodyPrescript()) {
+                        BlockedDomain bd = new BlockedDomain(domain, block, post.getString("date"));
                         if (bo.addBlockedDomainName(bd)) {
-                            System.out.println(
-                                    LocalDateTime.now().toString().concat(" ").concat(
-                                            bd.toString()
-                                                    .concat(" [ ")
-                                                    .concat(id)
-                                                    .concat(" \"")
-                                                    .concat(attachment.getString("originalFileName"))
-                                                    .concat("\" ]")
-                                    )
-                            );
+                            logger.info("{} {} [ {} \"{}\"]",
+                                    LocalDateTime.now(), bd, id, fileName);
                         }
+                    }
 
+                    try {
+                        Thread.sleep(1000 + (long) (Math.random() * 1000)); // 1-2 секунди
+                    } catch (InterruptedException e) {
+                        logger.error("Interrupted during delay: {}", e.getMessage(), e);
+                        Thread.currentThread().interrupt();
                     }
                 }
             }
-            /*
-            Ну й наша мета - формуємо вихідний файл.
-             */
+
+            // Зберігаємо результати
             bo.storeState();
-        } catch (IOException | JSONException ex) {
-            Logger.getLogger(Cip_gov_ua_getter.class.getName()).log(Level.SEVERE, null, ex);
+            logger.info("Successfully stored blocked domains state");
+
+        } catch (IOException e) {
+            logger.error("Failed to process articles: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to process articles", e);
+        } catch (JSONException e) {
+            logger.error("Failed to parse JSON: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to parse JSON", e);
         }
     }
 }
