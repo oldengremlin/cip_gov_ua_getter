@@ -1,3 +1,7 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ */
 package net.ukrcom.cip_gov_ua_getter;
 
 import java.time.Instant;
@@ -5,19 +9,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
-/**
- * Конструктор класа.
- *
- * @param dn - ім'я домена
- * @param b - статус операції над доменом (true - блокувати, false -
- * розблокувати)
- * @param s - дата в текстовому форматі ISO 8601 (наприклад,
- * "2023-10-15T12:00:00"), береться з атрибута date
- */
 public class BlockedDomain {
 
     protected String domainName;
