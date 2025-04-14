@@ -14,9 +14,10 @@ import java.net.IDN;
 import java.util.Properties;
 import com.microsoft.playwright.*;
 import java.util.Map;
-import java.util.HashMap;
+import com.ibm.icu.text.SpoofChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Клас зчитує перелік доменів з відповідних text/plain файлів у розпорядженнях.
@@ -34,22 +35,15 @@ public class GetPrescript {
     private final String userAgent;
     private final String secChUa;
 
-    // Таблиця гомогліфів для заміни на латинські символи
-    private static final Map<Character, Character> HOMOGRAPHS = new HashMap<>();
+    // SpoofChecker для обробки гомогліфів
+    private static final SpoofChecker SPOOF_CHECKER;
+    private static final Map<String, String> SKELETON_CACHE = new ConcurrentHashMap<>();
+
     static {
-        HOMOGRAPHS.put('а', 'a'); // кирилична а → латинська a
-        HOMOGRAPHS.put('о', 'o'); // кирилична о → латинська o
-        HOMOGRAPHS.put('е', 'e'); // кирилична е → латинська e
-        HOMOGRAPHS.put('і', 'i'); // кирилична і → латинська i
-        HOMOGRAPHS.put('с', 'c'); // кирилична с → латинська c
-        HOMOGRAPHS.put('р', 'p'); // кирилична р → латинська p
-        HOMOGRAPHS.put('у', 'y'); // кирилична у → латинська y
-        HOMOGRAPHS.put('к', 'k'); // кирилична к → латинська k
-        HOMOGRAPHS.put('х', 'x'); // кирилична х → латинська x
-        HOMOGRAPHS.put('А', 'A'); // кирилична А → латинська A
-        HOMOGRAPHS.put('О', 'O'); // кирилична О → латинська O
-        HOMOGRAPHS.put('Е', 'E'); // кирилична Е → латинська E
-        // Додайте інші гомогліфи за потреби
+        SpoofChecker.Builder builder = new SpoofChecker.Builder();
+        builder.setChecks(SpoofChecker.CONFUSABLE);
+        SPOOF_CHECKER = builder.build();
+        logger.debug("SpoofChecker initialized for confusables");
     }
 
     /**
@@ -156,7 +150,7 @@ public class GetPrescript {
     /**
      * Із зчитаного переліка доменів формуємо перелік доменів для блокування.
      * Домени, що містять відмінні від латинки символи, перекодуються в idn.
-     * Додаємо також латинізовані версії доменів із заміненими гомогліфами.
+     * Додаємо також латинізовані версії доменів із заміненими гомогліфами за допомогою icu4j.
      *
      * @return масив валідних доменів (IDN і латинізованих)
      */
@@ -177,7 +171,8 @@ public class GetPrescript {
                     .replaceAll("\\s+", "")
                     .toLowerCase();
 
-            if (cleaned.isBlank()) {
+            if (cleaned.isBlank() || cleaned.length() > 255) {
+                logger.warn("Skipping domain due to invalid length: {}", cleaned);
                 continue;
             }
 
@@ -185,6 +180,10 @@ public class GetPrescript {
                 // Оригінальний домен у форматі IDN
                 String idnDomain = IDN.toASCII(cleaned, IDN.ALLOW_UNASSIGNED);
                 if (domainValidator.isValid(idnDomain)) {
+                    if (!domainValidator.isValidTld(idnDomain)) {
+                        logger.warn("Invalid TLD for domain: {}", idnDomain);
+                        continue;
+                    }
                     sb.append(idnDomain).append("\n");
                     logger.info("Valid IDN domain: {}", idnDomain);
                 } else if (ipValidator.isValid(cleaned)) {
@@ -195,15 +194,20 @@ public class GetPrescript {
                     continue;
                 }
 
-                // Генерація латинізованого домену
-                String latinized = latinizeDomain(cleaned);
-                if (!latinized.equals(cleaned)) { // Якщо є гомогліфи
+                // Генерація латинізованого домену через SpoofChecker із кешуванням
+                boolean hasNonLatin = cleaned.chars().anyMatch(c -> c > 127);
+                if (hasNonLatin) {
+                    String latinized = SKELETON_CACHE.computeIfAbsent(cleaned, SPOOF_CHECKER::getSkeleton);
                     String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED);
                     if (domainValidator.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
+                        if (!domainValidator.isValidTld(latinizedIdn)) {
+                            logger.warn("Invalid TLD for latinized domain: {}", latinizedIdn);
+                            continue;
+                        }
                         sb.append(latinizedIdn).append("\n");
-                        logger.info("Valid latinized domain: {} (from {})", latinizedIdn, cleaned);
+                        logger.info("Valid latinized domain: {} (from {} -> {})", latinizedIdn, cleaned, latinized);
                     } else {
-                        logger.debug("Latinized domain invalid or identical: {} (from {})", latinized, cleaned);
+                        logger.debug("Latinized domain invalid or identical: {} (from {} -> {})", latinized, cleaned, latinized);
                     }
                 }
             } catch (IllegalArgumentException e) {
@@ -212,20 +216,6 @@ public class GetPrescript {
         }
 
         return sb.length() > 0 ? sb.toString().split("\n") : new String[0];
-    }
-
-    /**
-     * Замінює гомогліфи в домені на латинські еквіваленти.
-     *
-     * @param domain домен для обробки
-     * @return латинізований домен
-     */
-    private String latinizeDomain(String domain) {
-        StringBuilder latinized = new StringBuilder();
-        for (char c : domain.toCharArray()) {
-            latinized.append(HOMOGRAPHS.getOrDefault(c, c));
-        }
-        return latinized.toString();
     }
 
     /**
