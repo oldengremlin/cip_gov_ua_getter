@@ -8,34 +8,18 @@
     <resources>
       <resource>
         <directory>src/main/resources</directory>
+        <excludes>
+          <exclude>logback.xml</exclude>
+          <exclude>cip.gov.ua.properties</exclude>
+        </excludes>
       </resource>
     </resources>
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.12.1</version>
+        <version>3.14.0</version>
         <configuration>
           <release>16</release>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <version>3.1.0</version>
-        <configuration>
-          <mainClass>net.ukrcom.cip_gov_ua_getter.Cip_gov_ua_getter</mainClass>
-        </configuration>
-      </plugin>
-      <plugin>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>3.3.0</version>
-        <configuration>
-          <archive>
-            <manifest>
-              <addClasspath>true</addClasspath>
-              <mainClass>net.ukrcom.cip_gov_ua_getter.Cip_gov_ua_getter</mainClass>
-            </manifest>
-          </archive>
         </configuration>
       </plugin>
       <plugin>
