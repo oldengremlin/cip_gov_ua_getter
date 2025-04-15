@@ -89,7 +89,7 @@ public class GetPrescript {
                 "\"Chromium\";v=\"129\", \"Not:A-Brand\";v=\"24\", \"Google Chrome\";v=\"129\""
         ).trim();
 
-        if (origFileName != null && isExists(origFileName)) {
+        if (origFileName != null && isExists(getFileName())) {
             logger.info("Reading existing prescript file for ID {}: {}", id, getFileName());
             this.bodyPrescript = readLocalPrescript();
         } else {
