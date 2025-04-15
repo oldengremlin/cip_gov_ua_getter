@@ -21,6 +21,7 @@ import com.ibm.icu.text.SpoofChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 /**
  * Клас зчитує перелік доменів з відповідних text/plain файлів у розпорядженнях.
@@ -88,15 +89,21 @@ public class GetPrescript {
                 "secChUa",
                 "\"Chromium\";v=\"129\", \"Not:A-Brand\";v=\"24\", \"Google Chrome\";v=\"129\""
         ).trim();
+    }
 
-        //if (origFileName != null && isExists(getFileName())) {
-        if (isExists(getFileName())) {
-            logger.info("Reading existing prescript file for ID {}: {}", id, getFileName());
-            this.bodyPrescript = readLocalPrescript();
-        } else {
-            logger.info("Fetching prescript for ID {} from server", id);
-            this.bodyPrescript = fetchPrescriptWithRetry(p, 3);
+    public GetPrescript getPrescriptFrom(Properties p) {
+        try {
+            if (isExists(getFileName())) {
+                logger.info("Reading existing prescript file for ID {}: {}", id, getFileName());
+                this.bodyPrescript = readLocalPrescript();
+            } else {
+                logger.info("Fetching prescript for ID {} from server", id);
+                this.bodyPrescript = fetchPrescriptWithRetry(p, 3);
+            }
+        } catch (IOException ex) {
+            logger.warn("Failed getPrescriptFrom: {}", id);
         }
+        return this;
     }
 
     private String executeAjaxRequest(boolean returnAsDataUrl) {
