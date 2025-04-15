@@ -118,11 +118,13 @@ public class Cip_gov_ua_getter {
                         }
                     }
 
-                    try {
-                        Thread.sleep(1000 + (long) (Math.random() * 1000)); // 1-2 секунди
-                    } catch (InterruptedException e) {
-                        logger.error("Interrupted during delay: {}", e.getMessage(), e);
-                        Thread.currentThread().interrupt();
+                    if (!gp.isLocalRead()) {
+                        try {
+                            Thread.sleep(1000 + (long) (Math.random() * 1000)); // 1-2 секунди
+                        } catch (InterruptedException e) {
+                            logger.error("Interrupted during delay: {}", e.getMessage(), e);
+                            Thread.currentThread().interrupt();
+                        }
                     }
                 }
             }

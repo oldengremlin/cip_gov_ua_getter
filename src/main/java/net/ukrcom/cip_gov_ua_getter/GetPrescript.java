@@ -61,6 +61,7 @@ public class GetPrescript {
     // SpoofChecker для обробки гомогліфів
     private static final SpoofChecker SPOOF_CHECKER;
     private static final Map<String, String> SKELETON_CACHE = new ConcurrentHashMap<>();
+    private boolean localRead;
 
     static {
         SpoofChecker.Builder builder = new SpoofChecker.Builder();
@@ -70,6 +71,7 @@ public class GetPrescript {
     }
 
     public GetPrescript(Properties p, String i, String mt) throws IOException {
+        this.localRead = true;
         this.prop = p;
         this.id = i;
         this.mimeType = mt;
@@ -106,9 +108,13 @@ public class GetPrescript {
             } else if (mimeType.equalsIgnoreCase("text/plain")) {
                 logger.info("Fetching prescript for ID {} from server", id);
                 this.bodyPrescript = fetchPrescriptWithRetry(this.prop, 3);
+                this.localRead = false;
+            } else {
+                logger.debug("Skipping fetch for non-text/plain file ID {}: no local file", id);
             }
         } catch (IOException ex) {
             logger.warn("Failed getPrescriptFrom: {}", id);
+            this.localRead = false;
             throw new RuntimeException("Failed to get prescript for ID " + id, ex);
         }
         return this;
@@ -342,4 +348,9 @@ public class GetPrescript {
         logger.debug("getFileName ⮕ {} ⮕ {}", fileName, isExists(fileName));
         return fileName;
     }
+
+    public boolean isLocalRead() {
+        return this.localRead;
+    }
+
 }
