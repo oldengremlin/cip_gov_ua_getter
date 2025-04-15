@@ -89,7 +89,6 @@ public class GetPrescript {
                 "\"Chromium\";v=\"129\", \"Not:A-Brand\";v=\"24\", \"Google Chrome\";v=\"129\""
         ).trim();
 
-        System.err.println(getFileName());
         if (origFileName != null && isExists(origFileName)) {
             logger.info("Reading existing prescript file for ID {}: {}", id, getFileName());
             this.bodyPrescript = readLocalPrescript();
@@ -307,6 +306,7 @@ public class GetPrescript {
     }
 
     public GetPrescript setOrigFileName(String fileName) {
+        System.err.println("setOrigFileName(" + fileName + ")");
         this.origFileName = fileName;
         return this;
     }
@@ -316,6 +316,7 @@ public class GetPrescript {
     }
 
     public String getFileName() {
+        System.err.println(this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript.txt"));
         return this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript.txt");
     }
 }
