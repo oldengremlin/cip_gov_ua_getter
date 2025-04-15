@@ -38,7 +38,8 @@ public class GetPrescript {
     protected String origFileName;
     private final String userAgent;
     private final String secChUa;
-    private Properties prop;
+    private final Properties prop;
+    private final String mimeType;
 
     // Спільний JavaScript-код для AJAX-запиту
     private static final String FETCH_SCRIPT_TEMPLATE = """
@@ -68,9 +69,10 @@ public class GetPrescript {
         logger.debug("SpoofChecker initialized for confusables");
     }
 
-    public GetPrescript(Properties p, String i) throws IOException {
+    public GetPrescript(Properties p, String i, String mt) throws IOException {
         this.prop = p;
         this.id = i;
+        this.mimeType = mt;
         this.urlPrescript = this.prop.getProperty(
                 "urlPrescript",
                 "https://cip.gov.ua/services/cm/api/attachment/download?id="
@@ -95,14 +97,18 @@ public class GetPrescript {
     public GetPrescript getPrescriptFrom() {
         try {
             if (isExists(getFileName())) {
+                if (!mimeType.equalsIgnoreCase("text/plain")) {
+                    return this;
+                }
                 logger.info("Reading existing prescript file for ID {}: {}", id, getFileName());
                 this.bodyPrescript = readLocalPrescript();
-            } else {
+            } else if (mimeType.equalsIgnoreCase("text/plain")) {
                 logger.info("Fetching prescript for ID {} from server", id);
                 this.bodyPrescript = fetchPrescriptWithRetry(this.prop, 3);
             }
         } catch (IOException ex) {
             logger.warn("Failed getPrescriptFrom: {}", id);
+            throw new RuntimeException("Failed to get prescript for ID " + id, ex);
         }
         return this;
     }
@@ -269,7 +275,7 @@ public class GetPrescript {
         return sb.length() > 0 ? sb.toString().split("\n") : new String[0];
     }
 
-    public GetPrescript storePrescriptTo(String fn) {
+    public GetPrescript storePrescriptTo() {
         if (isExists(getFileName())) {
             logger.debug("Skipping store for ID {}: file already exists or origFileName not set", id);
             return this;
@@ -316,8 +322,8 @@ public class GetPrescript {
     }
 
     public GetPrescript setOrigFileName(String fileName) {
-        logger.debug("setOrigFileName ⮕ {}", fileName);
         this.origFileName = fileName;
+        logger.debug("Setting origFileName to {} for ID {}", this.origFileName, id);
         return this;
     }
 

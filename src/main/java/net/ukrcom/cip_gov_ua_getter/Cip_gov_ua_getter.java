@@ -99,10 +99,10 @@ public class Cip_gov_ua_getter {
                     String mimeType = attachment.getString("mimeType");
                     String fileName = attachment.getString("originalFileName");
 
-                    GetPrescript gp = new GetPrescript(prop, id)
+                    GetPrescript gp = new GetPrescript(prop, id, mimeType)
                             .setOrigFileName(fileName)
                             .getPrescriptFrom()
-                            .storePrescriptTo(fileName);
+                            .storePrescriptTo();
 
                     if (!mimeType.equalsIgnoreCase("text/plain")) {
                         logger.info("{} {} {} {} \"{}\"",
