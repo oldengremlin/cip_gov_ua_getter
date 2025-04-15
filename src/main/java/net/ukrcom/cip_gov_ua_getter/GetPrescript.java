@@ -21,7 +21,6 @@ import com.ibm.icu.text.SpoofChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Level;
 
 /**
  * Клас зчитує перелік доменів з відповідних text/plain файлів у розпорядженнях.
@@ -39,6 +38,7 @@ public class GetPrescript {
     protected String origFileName;
     private final String userAgent;
     private final String secChUa;
+    private Properties prop;
 
     // Спільний JavaScript-код для AJAX-запиту
     private static final String FETCH_SCRIPT_TEMPLATE = """
@@ -69,8 +69,9 @@ public class GetPrescript {
     }
 
     public GetPrescript(Properties p, String i) throws IOException {
+        this.prop = p;
         this.id = i;
-        this.urlPrescript = p.getProperty(
+        this.urlPrescript = this.prop.getProperty(
                 "urlPrescript",
                 "https://cip.gov.ua/services/cm/api/attachment/download?id="
         ).trim().concat(this.id);
@@ -81,24 +82,24 @@ public class GetPrescript {
         if (!this.storePrescriptTo.endsWith("/")) {
             this.storePrescriptTo = this.storePrescriptTo.concat("/");
         }
-        this.userAgent = p.getProperty(
+        this.userAgent = this.prop.getProperty(
                 "userAgent",
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
         ).trim();
-        this.secChUa = p.getProperty(
+        this.secChUa = this.prop.getProperty(
                 "secChUa",
                 "\"Chromium\";v=\"129\", \"Not:A-Brand\";v=\"24\", \"Google Chrome\";v=\"129\""
         ).trim();
     }
 
-    public GetPrescript getPrescriptFrom(Properties p) {
+    public GetPrescript getPrescriptFrom() {
         try {
             if (isExists(getFileName())) {
                 logger.info("Reading existing prescript file for ID {}: {}", id, getFileName());
                 this.bodyPrescript = readLocalPrescript();
             } else {
                 logger.info("Fetching prescript for ID {} from server", id);
-                this.bodyPrescript = fetchPrescriptWithRetry(p, 3);
+                this.bodyPrescript = fetchPrescriptWithRetry(this.prop, 3);
             }
         } catch (IOException ex) {
             logger.warn("Failed getPrescriptFrom: {}", id);

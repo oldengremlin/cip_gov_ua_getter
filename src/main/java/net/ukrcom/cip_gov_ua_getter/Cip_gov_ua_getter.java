@@ -101,7 +101,7 @@ public class Cip_gov_ua_getter {
 
                     GetPrescript gp = new GetPrescript(prop, id)
                             .setOrigFileName(fileName)
-                            .getPrescriptFrom(prop)
+                            .getPrescriptFrom()
                             .storePrescriptTo(fileName);
 
                     if (!mimeType.equalsIgnoreCase("text/plain")) {
