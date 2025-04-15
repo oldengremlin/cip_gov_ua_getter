@@ -261,7 +261,7 @@ public class GetPrescript {
     }
 
     public GetPrescript storePrescriptTo(String fn) {
-        if (origFileName == null || isExists(origFileName)) {
+        if (origFileName == null || isExists(getFileName())) {
             logger.debug("Skipping store for ID {}: file already exists or origFileName not set", id);
             return this;
         }
@@ -301,7 +301,7 @@ public class GetPrescript {
     }
 
     protected boolean isExists(String fn) {
-        File f = new File(getFileName());
+        File f = new File(fn);
         return f.exists() && f.canRead();
     }
 
@@ -316,8 +316,8 @@ public class GetPrescript {
     }
 
     public String getFileName() {
-        String fileName = this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript.txt");
+        String fileName = this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript" + this.id + ".txt");
         System.err.println("getFileName ⮕ " + fileName + " " + isExists(fileName));
-        return this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript.txt");
+        return fileName;
     }
 }
