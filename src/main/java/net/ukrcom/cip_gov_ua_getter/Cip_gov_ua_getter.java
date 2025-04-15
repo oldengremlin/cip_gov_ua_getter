@@ -14,6 +14,12 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ch.qos.logback.classic.Level;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 /**
  * Консольна утиліта для збору та обробки розпоряджень про блокування доменів.
@@ -23,6 +29,7 @@ import ch.qos.logback.classic.Level;
 public class Cip_gov_ua_getter {
 
     private static final Logger logger = LoggerFactory.getLogger(Cip_gov_ua_getter.class);
+    private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     /**
      * Основний процес.
@@ -104,6 +111,9 @@ public class Cip_gov_ua_getter {
                             .getPrescriptFrom()
                             .storePrescriptTo();
 
+                    // Оновлюємо дату файлу відповідно до post.date
+                    setFileDate(new File(gp.getFileName()), post.getString("date"));
+
                     if (!mimeType.equalsIgnoreCase("text/plain")) {
                         logger.info("{} {} {} {} \"{}\"",
                                 LocalDateTime.now(), post.getString("date"), block ? "+" : "-", id, fileName);
@@ -139,6 +149,30 @@ public class Cip_gov_ua_getter {
         } catch (JSONException e) {
             logger.error("Failed to parse JSON: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to parse JSON", e);
+        }
+    }
+
+    /**
+     * Встановлює дату модифікації файлу на основі дати з поста.
+     *
+     * @param file файл для оновлення
+     * @param dateStr дата у форматі ISO 8601 (наприклад, "2025-04-15T08:40:04")
+     */
+    private static void setFileDate(File file, String dateStr) {
+        if (!file.exists() || !file.canWrite()) {
+            logger.warn("Cannot set date for file {}: file does not exist or is not writable", file.getAbsolutePath());
+            return;
+        }
+
+        try {
+            LocalDateTime dateTime = LocalDateTime.parse(dateStr, ISO_FORMATTER);
+            long millis = dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            Files.setLastModifiedTime(file.toPath(), FileTime.fromMillis(millis));
+            logger.debug("Set file date for {} to {}", file.getAbsolutePath(), dateStr);
+        } catch (DateTimeParseException e) {
+            logger.warn("Failed to parse date '{}' for file {}: {}", dateStr, file.getAbsolutePath(), e.getMessage());
+        } catch (IOException e) {
+            logger.warn("Failed to set date for file {}: {}", file.getAbsolutePath(), e.getMessage());
         }
     }
 }
