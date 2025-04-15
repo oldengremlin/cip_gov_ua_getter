@@ -48,8 +48,6 @@
             <resource>
                 <directory>src/main/resources</directory>
                 <excludes>
-                    <!-- java -Dlogback.configurationFile=./logback.xml -Dlogback.debug=true -jar target/cip_gov_ua_getter-2.1-all.jar -->
-                    <!-- exclude>logback.xml</exclude -->
                     <exclude>cip.gov.ua.properties</exclude>
                 </excludes>
             </resource>
