@@ -316,7 +316,8 @@ public class GetPrescript {
     }
 
     public String getFileName() {
-        System.err.println("getFileName ⮕ " + this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript.txt"));
+        String fileName = this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript.txt");
+        System.err.println("getFileName ⮕ " + fileName + " " + isExists(fileName));
         return this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript.txt");
     }
 }
