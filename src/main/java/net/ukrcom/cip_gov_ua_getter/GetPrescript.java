@@ -269,7 +269,6 @@ public class GetPrescript {
     }
 
     public GetPrescript storePrescriptTo(String fn) {
-        //if (origFileName == null || isExists(getFileName())) {
         if (isExists(getFileName())) {
             logger.debug("Skipping store for ID {}: file already exists or origFileName not set", id);
             return this;
@@ -285,7 +284,7 @@ public class GetPrescript {
                     }
                     logger.info("Stored prescript {} on attempt {}", this.id, attempt);
                     return this;
-                } catch (Exception e) {
+                } catch (IOException e) {
                     logger.warn("Store attempt {} failed for ID {}: {}", attempt, this.id, e.getMessage());
                     if (attempt == 3) {
                         logger.error("Failed to store prescript {} after 3 attempts", this.id);
@@ -311,13 +310,11 @@ public class GetPrescript {
 
     protected boolean isExists(String fn) {
         File f = new File(fn);
-        System.err.println("isExists ⮕ (" + f.exists() + " && " + f.canRead() + ")");
         logger.debug("isExists ⮕ ({}, {})", f.exists(), f.canRead());
         return f.exists() && f.canRead();
     }
 
     public GetPrescript setOrigFileName(String fileName) {
-        System.err.println("setOrigFileName(" + fileName + ")");
         logger.debug("setOrigFileName ⮕ {}", fileName);
         this.origFileName = fileName;
         return this;
@@ -328,8 +325,7 @@ public class GetPrescript {
     }
 
     public String getFileName() {
-        String fileName = this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : "prescript" + this.id + ".txt");
-        System.err.println("getFileName ⮕ " + fileName + " " + isExists(fileName));
+        String fileName = this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : this.id + "_prescript.txt");
         logger.debug("getFileName ⮕ {} ⮕ {}", fileName, isExists(fileName));
         return fileName;
     }
