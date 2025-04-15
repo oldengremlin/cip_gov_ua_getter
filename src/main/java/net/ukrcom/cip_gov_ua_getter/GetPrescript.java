@@ -98,6 +98,7 @@ public class GetPrescript {
         try {
             if (isExists(getFileName())) {
                 if (!mimeType.equalsIgnoreCase("text/plain")) {
+                    logger.debug("Skipping read for non-text/plain file ID {}: {}", id, getFileName());
                     return this;
                 }
                 logger.info("Reading existing prescript file for ID {}: {}", id, getFileName());
@@ -295,6 +296,11 @@ public class GetPrescript {
                     logger.warn("Store attempt {} failed for ID {}: {}", attempt, this.id, e.getMessage());
                     if (attempt == 3) {
                         logger.error("Failed to store prescript {} after 3 attempts", this.id);
+                        try (FileWriter fw = new FileWriter("failed_ids.txt", true)) {
+                            fw.write("ID: " + this.id + ", Error: Failed to store after 3 attempts\n");
+                        } catch (IOException ex) {
+                            logger.warn("Failed to write to failed_ids.txt for ID {}: {}", this.id, ex.getMessage());
+                        }
                     }
                     try {
                         Thread.sleep(1000 + (long) (Math.random() * 1000));
