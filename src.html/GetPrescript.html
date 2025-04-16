@@ -1,0 +1,412 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>GetPrescript.java</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<style type="text/css">
+<!--
+body {color: #000000; background-color: #ffffff; font-family: monospace}
+pre {color: #000000; background-color: #ffffff; font-family: monospace}
+table {color: #000000; background-color: #e9e8e2; font-family: monospace}
+.ST0 {color: #969696; font-family: monospace; font-weight: bold}
+.ST1 {font-family: monospace; font-weight: bold}
+.comment {color: #969696}
+.ST4 {color: #009900}
+.ST2 {color: #009900; font-family: monospace; font-style: italic}
+.ST3 {font-family: monospace; font-style: italic}
+.literal {color: #0000e6}
+.ST5 {color: #ce7b00; font-family: monospace; font-weight: bold}
+.string {color: #ce7b00}
+-->
+</style>
+</head>
+<body>
+<table width="100%"><tr><td align="center">/home/olden/NetBeansProjects/cip_gov_ua_getter/src/main/java/net/ukrcom/cip_gov_ua_getter/GetPrescript.java</td></tr></table>
+<pre>
+  1 <span class="comment">/*</span>
+  2 <span class="comment"> * Click ... (ліцензія без змін)</span>
+  3 <span class="comment"> */</span>
+  4 <span class="literal">package</span> net.ukrcom.cip_gov_ua_getter;
+  5 
+  6 <span class="literal">import</span> java.io.File;
+  7 <span class="literal">import</span> java.io.FileOutputStream;
+  8 <span class="literal">import</span> java.io.IOException;
+  9 <span class="literal">import</span> java.io.FileWriter;
+ 10 <span class="literal">import</span> java.nio.file.Files;
+ 11 <span class="literal">import</span> java.nio.charset.StandardCharsets;
+ 12 <span class="literal">import</span> org.apache.commons.validator.routines.DomainValidator;
+ 13 <span class="literal">import</span> org.apache.commons.validator.routines.InetAddressValidator;
+ 14 <span class="literal">import</span> java.net.IDN;
+ 15 <span class="literal">import</span> java.net.URI;
+ 16 <span class="literal">import</span> java.net.URISyntaxException;
+ 17 <span class="literal">import</span> java.util.Properties;
+ 18 <span class="literal">import</span> com.microsoft.playwright.*;
+ 19 <span class="literal">import</span> java.util.Map;
+ 20 <span class="literal">import</span> com.ibm.icu.text.SpoofChecker;
+ 21 <span class="literal">import</span> org.slf4j.Logger;
+ 22 <span class="literal">import</span> org.slf4j.LoggerFactory;
+ 23 <span class="literal">import</span> java.util.concurrent.ConcurrentHashMap;
+ 24 
+ 25 <span class="comment">/**</span>
+ 26 <span class="comment"> * </span><span class="ST0">Клас</span> <span class="ST0">зчитує</span> <span class="ST0">перелік</span> <span class="ST0">доменів</span> <span class="ST0">з</span> <span class="ST0">відповідних</span> <span class="ST0">text</span><span class="ST0">/</span><span class="ST0">plain</span> <span class="ST0">файлів</span> <span class="ST0">у</span> <span class="ST0">розпорядженнях</span><span class="ST0">.</span>
+ 27 <span class="comment"> *</span>
+ 28 <span class="comment"> * </span><span class="ST0">@author</span> <span class="comment">olden</span>
+ 29  <span class="comment">*/</span>
+ 30 <span class="literal">public</span> <span class="literal">class</span> <span class="ST1">GetPrescript</span> {
+ 31 
+ 32     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">final</span> Logger <span class="ST2">logger</span> = LoggerFactory.<span class="ST3">getLogger</span>(GetPrescript.<span class="literal">class</span>);
+ 33 
+ 34     <span class="literal">protected</span> <span class="literal">final</span> String <span class="ST4">urlPrescript</span>;
+ 35     <span class="literal">protected</span> String <span class="ST4">bodyPrescript</span>;
+ 36     <span class="literal">protected</span> String <span class="ST4">id</span>;
+ 37     <span class="literal">protected</span> String <span class="ST4">storePrescriptTo</span>;
+ 38     <span class="literal">protected</span> String <span class="ST4">origFileName</span>;
+ 39     <span class="literal">private</span> <span class="literal">final</span> String <span class="ST4">userAgent</span>;
+ 40     <span class="literal">private</span> <span class="literal">final</span> String <span class="ST4">secChUa</span>;
+ 41     <span class="literal">private</span> <span class="literal">final</span> Properties <span class="ST4">prop</span>;
+ 42     <span class="literal">private</span> <span class="literal">final</span> String <span class="ST4">mimeType</span>;
+ 43     <span class="literal">private</span> <span class="literal">final</span> <span class="literal">boolean</span> <span class="ST4">debug</span>;
+ 44 
+ 45     <span class="comment">// Спільний JavaScript-код для AJAX-запиту</span>
+ 46     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">final</span> String <span class="ST2">FETCH_SCRIPT_TEMPLATE</span> = <span class="string">&quot;&quot;&quot;</span>
+ 47             <span class="string">const response = await fetch(&#39;%s&#39;, {</span>
+ 48             <span class="string">    method: &#39;GET&#39;,</span>
+ 49             <span class="string">    headers: {</span>
+ 50             <span class="string">        &#39;Accept&#39;: &#39;text/plain, */*&#39;,</span>
+ 51             <span class="string">        &#39;Sec-Ch-Ua&#39;: &#39;%s&#39;,</span>
+ 52             <span class="string">        &#39;Sec-Fetch-Dest&#39;: &#39;empty&#39;,</span>
+ 53             <span class="string">        &#39;Sec-Fetch-Mode&#39;: &#39;cors&#39;,</span>
+ 54             <span class="string">        &#39;Sec-Fetch-Site&#39;: &#39;same-origin&#39;</span>
+ 55             <span class="string">    }</span>
+ 56             <span class="string">});</span>
+ 57             <span class="string">if (!response.ok) {</span>
+ 58             <span class="string">    throw new Error(`HTTP ${response.status}`);</span>
+ 59             <span class="string">}</span>
+ 60 <span class="string">            &quot;&quot;&quot;</span>;
+ 61 
+ 62     <span class="comment">// SpoofChecker для обробки гомогліфів</span>
+ 63     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">final</span> SpoofChecker <span class="ST2">SPOOF_CHECKER</span>;
+ 64     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">final</span> Map&lt;String, String&gt; <span class="ST2">SKELETON_CACHE</span> = <span class="literal">new</span> ConcurrentHashMap&lt;&gt;();
+ 65     <span class="literal">private</span> <span class="literal">boolean</span> <span class="ST4">localRead</span>;
+ 66 
+ 67     <span class="literal">static</span> {
+ 68         SpoofChecker.<span class="ST3">Builder</span> builder = <span class="literal">new</span> SpoofChecker.Builder();
+ 69         builder.setChecks(SpoofChecker.<span class="ST2">CONFUSABLE</span>);
+ 70         <span class="ST2">SPOOF_CHECKER</span> = builder.build();
+ 71         <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">SpoofChecker initialized for confusables</span><span class="string">&quot;</span>);
+ 72     }
+ 73 
+ 74     <span class="literal">public</span> <span class="ST1">GetPrescript</span>(Properties p, String i, String mt) <span class="literal">throws</span> IOException {
+ 75         <span class="literal">this</span>.<span class="ST4">localRead</span> = <span class="literal">true</span>;
+ 76         <span class="literal">this</span>.<span class="ST4">prop</span> = p;
+ 77         <span class="literal">this</span>.<span class="ST4">debug</span> = <span class="literal">this</span>.<span class="ST4">prop</span>.getProperty(<span class="string">&quot;</span><span class="string">debug</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">false</span><span class="string">&quot;</span>).equalsIgnoreCase(<span class="string">&quot;</span><span class="string">true</span><span class="string">&quot;</span>);
+ 78         <span class="literal">this</span>.<span class="ST4">id</span> = i;
+ 79         <span class="literal">this</span>.<span class="ST4">mimeType</span> = mt;
+ 80         <span class="literal">this</span>.<span class="ST4">urlPrescript</span> = <span class="literal">this</span>.<span class="ST4">prop</span>.getProperty(
+ 81                 <span class="string">&quot;</span><span class="string">urlPrescript</span><span class="string">&quot;</span>,
+ 82                 <span class="string">&quot;</span><span class="string">https://cip.gov.ua/services/cm/api/attachment/download?id=</span><span class="string">&quot;</span>
+ 83         ).trim().concat(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">id</span>);
+ 84         <span class="literal">this</span>.<span class="ST4">storePrescriptTo</span> = p.getProperty(
+ 85                 <span class="string">&quot;</span><span class="string">store_prescript_to</span><span class="string">&quot;</span>,
+ 86                 <span class="string">&quot;</span><span class="string">./Prescript</span><span class="string">&quot;</span>
+ 87         ).trim();
+ 88         <span class="literal">if</span> (!<span class="literal">this</span>.<span class="ST4">storePrescriptTo</span>.endsWith(<span class="string">&quot;</span><span class="string">/</span><span class="string">&quot;</span>)) {
+ 89             <span class="literal">this</span>.<span class="ST4">storePrescriptTo</span> = <span class="literal">this</span>.<span class="ST4">storePrescriptTo</span>.concat(<span class="string">&quot;</span><span class="string">/</span><span class="string">&quot;</span>);
+ 90         }
+ 91         <span class="literal">this</span>.<span class="ST4">userAgent</span> = <span class="literal">this</span>.<span class="ST4">prop</span>.getProperty(
+ 92                 <span class="string">&quot;</span><span class="string">userAgent</span><span class="string">&quot;</span>,
+ 93                 <span class="string">&quot;</span><span class="string">Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36</span><span class="string">&quot;</span>
+ 94         ).trim();
+ 95         <span class="literal">this</span>.<span class="ST4">secChUa</span> = <span class="literal">this</span>.<span class="ST4">prop</span>.getProperty(
+ 96                 <span class="string">&quot;</span><span class="string">secChUa</span><span class="string">&quot;</span>,
+ 97                 <span class="string">&quot;</span><span class="ST5">\&quot;</span><span class="string">Chromium</span><span class="ST5">\&quot;</span><span class="string">;v=</span><span class="ST5">\&quot;</span><span class="string">129</span><span class="ST5">\&quot;</span><span class="string">, </span><span class="ST5">\&quot;</span><span class="string">Not:A-Brand</span><span class="ST5">\&quot;</span><span class="string">;v=</span><span class="ST5">\&quot;</span><span class="string">24</span><span class="ST5">\&quot;</span><span class="string">, </span><span class="ST5">\&quot;</span><span class="string">Google Chrome</span><span class="ST5">\&quot;</span><span class="string">;v=</span><span class="ST5">\&quot;</span><span class="string">129</span><span class="ST5">\&quot;</span><span class="string">&quot;</span>
+ 98         ).trim();
+ 99     }
+100 
+101     <span class="literal">public</span> GetPrescript <span class="ST1">getPrescriptFrom</span>() {
+102         <span class="literal">try</span> {
+103             <span class="literal">if</span> (isExists(getFileName())) {
+104                 <span class="literal">if</span> (!<span class="ST4">mimeType</span>.equalsIgnoreCase(<span class="string">&quot;</span><span class="string">text/plain</span><span class="string">&quot;</span>)) {
+105                     <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Skipping read for non-text/plain file ID {}: {}</span><span class="string">&quot;</span>, <span class="ST4">i</span><span class="ST4">d</span>, getFileName());
+106                     <span class="literal">return</span> <span class="literal">this</span>;
+107                 }
+108                 <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Reading existing prescript file for ID {}: {}</span><span class="string">&quot;</span>, <span class="ST4">i</span><span class="ST4">d</span>, getFileName());
+109                 <span class="literal">this</span>.<span class="ST4">bodyPrescript</span> = readLocalPrescript();
+110             } <span class="literal">else</span> <span class="literal">if</span> (<span class="ST4">mimeType</span>.equalsIgnoreCase(<span class="string">&quot;</span><span class="string">text/plain</span><span class="string">&quot;</span>)) {
+111                 <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Fetching prescript for ID {} from server</span><span class="string">&quot;</span>, <span class="ST4">i</span><span class="ST4">d</span>);
+112                 <span class="literal">this</span>.<span class="ST4">bodyPrescript</span> = fetchPrescriptWithRetry(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">prop</span>, 3);
+113                 <span class="literal">this</span>.<span class="ST4">localRead</span> = <span class="literal">false</span>;
+114             } <span class="literal">else</span> {
+115                 <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Skipping fetch for non-text/plain file ID {}: no local file</span><span class="string">&quot;</span>, <span class="ST4">i</span><span class="ST4">d</span>);
+116             }
+117         } <span class="literal">catch</span> (IOException ex) {
+118             <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Failed getPrescriptFrom: {}</span><span class="string">&quot;</span>, <span class="ST4">i</span><span class="ST4">d</span>);
+119             <span class="literal">this</span>.<span class="ST4">localRead</span> = <span class="literal">false</span>;
+120             <span class="literal">throw</span> <span class="literal">new</span> RuntimeException(<span class="string">&quot;</span><span class="string">Failed to get prescript for ID </span><span class="string">&quot;</span> + <span class="ST4">id</span>, ex);
+121         }
+122         <span class="literal">return</span> <span class="literal">this</span>;
+123     }
+124 
+125     <span class="literal">private</span> String <span class="ST1">executeAjaxRequest</span>(<span class="literal">boolean</span> returnAsDataUrl) {
+126         <span class="literal">try</span> (Playwright playwright = Playwright.<span class="ST3">create</span>(); Browser browser = playwright.chromium().launch(<span class="literal">n</span><span class="literal">ew</span> BrowserType.LaunchOptions()
+127                 .setHeadless(<span class="literal">t</span><span class="literal">rue</span>)
+128                 .setChannel(<span class="string">&quot;</span><span class="string">chrome</span><span class="string">&quot;</span>)); BrowserContext context = browser.newContext(<span class="literal">n</span><span class="literal">ew</span> Browser.NewContextOptions()
+129                 .setUserAgent(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">userAgent</span>)
+130                 .setLocale(<span class="string">&quot;</span><span class="string">uk-UA</span><span class="string">&quot;</span>)
+131                 .setExtraHTTPHeaders(Map.<span class="ST3">of</span>(
+132                         <span class="string">&quot;</span><span class="string">Accept</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">text/plain, */*</span><span class="string">&quot;</span>,
+133                         <span class="string">&quot;</span><span class="string">Accept-Language</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">uk,en-US;q=0.9,en;q=0.8,ru;q=0.7</span><span class="string">&quot;</span>,
+134                         <span class="string">&quot;</span><span class="string">Sec-Ch-Ua</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">secChUa</span>,
+135                         <span class="string">&quot;</span><span class="string">Sec-Fetch-Dest</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">empty</span><span class="string">&quot;</span>,
+136                         <span class="string">&quot;</span><span class="string">Sec-Fetch-Mode</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">cors</span><span class="string">&quot;</span>,
+137                         <span class="string">&quot;</span><span class="string">Sec-Fetch-Site</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">same-origin</span><span class="string">&quot;</span>
+138                 ))); Page page = context.newPage()) {
+139 
+140             <span class="comment">// Блокуємо запити до Google Analytics і Google Tag Manager</span>
+141             page.route(<span class="string">&quot;</span><span class="string">**/*google-analytics.com/**</span><span class="string">&quot;</span>, route -&gt; {
+142                 String url = route.request().url();
+143                 <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Blocked Google Analytics request: {}</span><span class="string">&quot;</span>, url);
+144                 route.abort();
+145             });
+146             page.route(<span class="string">&quot;</span><span class="string">**/*googletagmanager.com/**</span><span class="string">&quot;</span>, route -&gt; {
+147                 String url = route.request().url();
+148                 <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Blocked Google Tag Manager request: {}</span><span class="string">&quot;</span>, url);
+149                 route.abort();
+150             });
+151 
+152             <span class="comment">// Блокуємо статичні ресурси (зображення, шрифти, стилі)</span>
+153             page.route(<span class="string">&quot;</span><span class="string">**/*.{jpg,jpeg,png,svg,woff,woff2,ttf,css,gif,ico}</span><span class="string">&quot;</span>, route -&gt; {
+154                 String url = route.request().url();
+155                 <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Blocked static resource: {}</span><span class="string">&quot;</span>, url);
+156                 route.abort();
+157             });
+158 
+159             <span class="comment">// Логування запитів і відповідей у дебаг-режимі</span>
+160             <span class="literal">if</span> (<span class="literal">this</span>.<span class="ST4">debug</span>) {
+161                 page.onRequest(request -&gt; <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Playwright request: {} {}</span><span class="string">&quot;</span>, request.method(), request.url()));
+162                 page.onResponse(response -&gt; <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Playwright response: {} {} {}</span><span class="string">&quot;</span>,
+163                         response.status(), response.request().method(), response.url()));
+164             }
+165 
+166             <span class="comment">// Витягуємо базовий URL із urlPrescript</span>
+167             String baseUrl;
+168             <span class="literal">try</span> {
+169                 URI uri = <span class="literal">new</span> URI(<span class="ST4">u</span><span class="ST4">rlPrescript</span>);
+170                 String scheme = uri.getScheme();
+171                 String host = uri.getHost();
+172                 <span class="literal">int</span> port = uri.getPort();
+173                 baseUrl = scheme + <span class="string">&quot;</span><span class="string">://</span><span class="string">&quot;</span> + host + (port != -1 ? <span class="string">&quot;</span><span class="string">:</span><span class="string">&quot;</span> + port : <span class="string">&quot;&quot;</span>) + <span class="string">&quot;</span><span class="string">/</span><span class="string">&quot;</span>;
+174             } <span class="literal">catch</span> (URISyntaxException e) {
+175                 <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Failed to parse base URL from {}, falling back to default: {}</span><span class="string">&quot;</span>, <span class="ST4">u</span><span class="ST4">rlPrescript</span>, e.getMessage());
+176                 baseUrl = <span class="string">&quot;</span><span class="string">https://cip.gov.ua/</span><span class="string">&quot;</span>;
+177             }
+178 
+179             <span class="comment">// Ініціалізація сесії</span>
+180             <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Navigating to base URL: {}</span><span class="string">&quot;</span>, baseUrl);
+181             page.navigate(baseUrl);
+182             page.waitForLoadState();
+183 
+184             <span class="comment">// Формуємо JavaScript-скрипт</span>
+185             String script = returnAsDataUrl
+186                     ? <span class="string">&quot;&quot;&quot;</span>
+187                     <span class="string">async () =&gt; {</span>
+188                     <span class="string">    %s</span>
+189                     <span class="string">    const blob = await response.blob();</span>
+190                     <span class="string">    return new Promise(resolve =&gt; {</span>
+191                     <span class="string">        const reader = new FileReader();</span>
+192                     <span class="string">        reader.onload = () =&gt; resolve(reader.result);</span>
+193                     <span class="string">        reader.readAsDataURL(blob);</span>
+194                     <span class="string">    });</span>
+195                     <span class="string">}</span>
+196 <span class="string">                    &quot;&quot;&quot;</span>.formatted(<span class="ST2">F</span><span class="ST2">ETCH_SCRIPT_TEMPLATE</span>.formatted(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">urlPrescript</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">secChUa</span>))
+197                     : <span class="string">&quot;&quot;&quot;</span>
+198                     <span class="string">async () =&gt; {</span>
+199                     <span class="string">    %s</span>
+200                     <span class="string">    return await response.text();</span>
+201                     <span class="string">}</span>
+202 <span class="string">                    &quot;&quot;&quot;</span>.formatted(<span class="ST2">F</span><span class="ST2">ETCH_SCRIPT_TEMPLATE</span>.formatted(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">urlPrescript</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">secChUa</span>));
+203 
+204             <span class="literal">return</span> (String) page.evaluate(script);
+205         }
+206     }
+207 
+208     <span class="literal">private</span> String <span class="ST1">readLocalPrescript</span>() <span class="literal">throws</span> IOException {
+209         File file = <span class="literal">new</span> File(getFileName());
+210         <span class="literal">return</span> Files.<span class="ST3">readString</span>(file.toPath(), StandardCharsets.<span class="ST2">UTF_8</span>);
+211     }
+212 
+213     <span class="literal">private</span> String <span class="ST1">fetchPrescriptWithRetry</span>(Properties p, <span class="literal">int</span> maxRetries) <span class="literal">throws</span> IOException {
+214         <span class="literal">for</span> (<span class="literal">int</span> attempt = 1; attempt &lt;= maxRetries; attempt++) {
+215             <span class="literal">try</span> {
+216                 String result = executeAjaxRequest(<span class="literal">f</span><span class="literal">alse</span>);
+217                 <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Successfully fetched prescript ID {} on attempt {}</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">id</span>, attempt);
+218                 <span class="literal">return</span> result;
+219             } <span class="literal">catch</span> (Exception e) {
+220                 <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Attempt {} failed for ID {}: {}</span><span class="string">&quot;</span>, attempt, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">id</span>, e.getMessage());
+221                 <span class="literal">if</span> (attempt == maxRetries) {
+222                     <span class="ST2">logger</span>.error(<span class="string">&quot;</span><span class="string">Failed to fetch prescript ID {} after {} attempts: {}</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">id</span>, maxRetries, e.getMessage());
+223                     <span class="literal">try</span> (FileWriter fw = <span class="literal">new</span> FileWriter(<span class="string">&quot;</span><span class="string">failed_ids.txt</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">rue</span>)) {
+224                         fw.write(<span class="string">&quot;</span><span class="string">ID: </span><span class="string">&quot;</span> + <span class="literal">this</span>.<span class="ST4">id</span> + <span class="string">&quot;</span><span class="string">, Error: </span><span class="string">&quot;</span> + e.getMessage() + <span class="string">&quot;</span><span class="ST5">\n</span><span class="string">&quot;</span>);
+225                     }
+226                     <span class="literal">throw</span> <span class="literal">new</span> IOException(<span class="string">&quot;</span><span class="string">Failed to fetch prescript after </span><span class="string">&quot;</span> + maxRetries + <span class="string">&quot;</span><span class="string"> attempts: </span><span class="string">&quot;</span> + e.getMessage(), e);
+227                 }
+228                 <span class="literal">try</span> {
+229                     Thread.<span class="ST3">sleep</span>(1000 + (<span class="literal">long</span>) (Math.<span class="ST3">random</span>() * 1000));
+230                 } <span class="literal">catch</span> (InterruptedException ie) {
+231                     Thread.<span class="ST3">currentThread</span>().interrupt();
+232                 }
+233             }
+234         }
+235         <span class="literal">throw</span> <span class="literal">new</span> IOException(<span class="string">&quot;</span><span class="string">Failed to fetch prescript: no attempts succeeded</span><span class="string">&quot;</span>);
+236     }
+237 
+238     <span class="literal">private</span> String <span class="ST1">extractTld</span>(String domain) {
+239         <span class="literal">if</span> (domain == <span class="literal">null</span> || domain.isEmpty()) {
+240             <span class="literal">return</span> <span class="literal">null</span>;
+241         }
+242         <span class="literal">int</span> lastDot = domain.lastIndexOf(<span class="string">&#39;</span><span class="string">.</span><span class="string">&#39;</span>);
+243         <span class="literal">if</span> (lastDot == -1 || lastDot == domain.length() - 1) {
+244             <span class="literal">return</span> <span class="literal">null</span>;
+245         }
+246         <span class="literal">return</span> domain.substring(lastDot);
+247     }
+248 
+249     <span class="literal">public</span> String[] <span class="ST1">getBodyPrescript</span>() {
+250         <span class="literal">if</span> (<span class="ST4">bodyPrescript</span>.length() &gt; 10_000_000) {
+251             <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Prescript ID {} is too large ({} bytes), skipping</span><span class="string">&quot;</span>, <span class="ST4">i</span><span class="ST4">d</span>, <span class="ST4">b</span><span class="ST4">odyPrescript</span>.length());
+252             <span class="literal">return</span> <span class="literal">new</span> String[0];
+253         }
+254         DomainValidator domainValidator = DomainValidator.<span class="ST3">getInstance</span>(<span class="literal">t</span><span class="literal">rue</span>);
+255         InetAddressValidator ipValidator = InetAddressValidator.<span class="ST3">getInstance</span>();
+256         StringBuilder sb = <span class="literal">new</span> StringBuilder();
+257 
+258         <span class="literal">for</span> (String s : <span class="literal">this</span>.<span class="ST4">bodyPrescript</span>.split(<span class="string">&quot;</span><span class="ST5">\n</span><span class="string">&quot;</span>)) {
+259             String cleaned = s.trim()
+260                     .replaceAll(<span class="string">&quot;</span><span class="string">(?i)^(https?://|</span><span class="string">ftp://)</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">&quot;</span>)
+261                     .replaceAll(<span class="string">&quot;</span><span class="string">(?i)^(www</span><span class="ST5">\\</span><span class="string">.|ftp</span><span class="ST5">\\</span><span class="string">.|m</span><span class="ST5">\\</span><span class="string">.)</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">&quot;</span>)
+262                     .replaceAll(<span class="string">&quot;</span><span class="string">/.*$</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">&quot;</span>)
+263                     .replaceAll(<span class="string">&quot;</span><span class="ST5">\\</span><span class="string">s+</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">&quot;</span>)
+264                     .toLowerCase();
+265 
+266             <span class="literal">if</span> (cleaned.isBlank() || cleaned.length() &gt; 255) {
+267                 <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Skipping domain due to invalid length: {}</span><span class="string">&quot;</span>, cleaned);
+268                 <span class="literal">continue</span>;
+269             }
+270 
+271             <span class="literal">try</span> {
+272                 String idnDomain = IDN.<span class="ST3">toASCII</span>(cleaned, IDN.<span class="ST2">ALLOW_UNASSIGNED</span>);
+273                 <span class="literal">if</span> (domainValidator.isValid(idnDomain)) {
+274                     String tld = extractTld(idnDomain);
+275                     <span class="literal">if</span> (tld == <span class="literal">null</span> || !domainValidator.isValidTld(tld)) {
+276                         <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Invalid TLD &#39;{}&#39; for domain: {}</span><span class="string">&quot;</span>, tld, idnDomain);
+277                         <span class="literal">continue</span>;
+278                     }
+279                     sb.append(idnDomain).append(<span class="string">&quot;</span><span class="ST5">\n</span><span class="string">&quot;</span>);
+280                     <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Valid IDN domain: {}</span><span class="string">&quot;</span>, idnDomain);
+281                 } <span class="literal">else</span> <span class="literal">if</span> (ipValidator.isValid(cleaned)) {
+282                     <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Skipping IP address: {}</span><span class="string">&quot;</span>, cleaned);
+283                     <span class="literal">continue</span>;
+284                 } <span class="literal">else</span> {
+285                     <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Invalid IDN domain: {}</span><span class="string">&quot;</span>, cleaned);
+286                     <span class="literal">continue</span>;
+287                 }
+288 
+289                 <span class="literal">boolean</span> hasNonLatin = cleaned.chars().anyMatch(c -&gt; c &gt; 127);
+290                 <span class="literal">if</span> (hasNonLatin) {
+291                     String latinized = <span class="ST2">SKELETON_CACHE</span>.computeIfAbsent(cleaned, <span class="ST2">SPOOF_CHECKER</span>::getSkeleton);
+292                     String latinizedIdn = IDN.<span class="ST3">toASCII</span>(latinized, IDN.<span class="ST2">ALLOW_UNASSIGNED</span>);
+293                     <span class="literal">if</span> (domainValidator.isValid(latinizedIdn) &amp;&amp; !latinizedIdn.equals(idnDomain)) {
+294                         String latinizedTld = extractTld(latinizedIdn);
+295                         <span class="literal">if</span> (latinizedTld == <span class="literal">null</span> || !domainValidator.isValidTld(latinizedTld)) {
+296                             <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Invalid TLD &#39;{}&#39; for latinized domain: {}</span><span class="string">&quot;</span>, latinizedTld, latinizedIdn);
+297                             <span class="literal">continue</span>;
+298                         }
+299                         sb.append(latinizedIdn).append(<span class="string">&quot;</span><span class="ST5">\n</span><span class="string">&quot;</span>);
+300                         <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Valid latinized domain: {} (from {} -&gt; {})</span><span class="string">&quot;</span>, latinizedIdn, cleaned, latinized);
+301                     } <span class="literal">else</span> {
+302                         <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Latinized domain invalid or identical: {} (from {} -&gt; {})</span><span class="string">&quot;</span>, latinized, cleaned, latinized);
+303                     }
+304                 }
+305             } <span class="literal">catch</span> (IllegalArgumentException e) {
+306                 <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Failed to process: {} ({})</span><span class="string">&quot;</span>, cleaned, e.getMessage());
+307             }
+308         }
+309 
+310         <span class="literal">return</span> sb.length() &gt; 0 ? sb.toString().split(<span class="string">&quot;</span><span class="ST5">\n</span><span class="string">&quot;</span>) : <span class="literal">new</span> String[0];
+311     }
+312 
+313     <span class="literal">public</span> GetPrescript <span class="ST1">storePrescriptTo</span>() {
+314         <span class="literal">if</span> (isExists(getFileName())) {
+315             <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Skipping store for ID {}: file already exists or origFileName not set</span><span class="string">&quot;</span>, <span class="ST4">i</span><span class="ST4">d</span>);
+316             <span class="literal">return</span> <span class="literal">this</span>;
+317         }
+318 
+319         <span class="literal">if</span> (<span class="literal">this</span>.mkDir()) {
+320             <span class="literal">for</span> (<span class="literal">int</span> attempt = 1; attempt &lt;= 3; attempt++) {
+321                 <span class="literal">try</span> {
+322                     String dataUrl = executeAjaxRequest(<span class="literal">t</span><span class="literal">rue</span>);
+323                     <span class="literal">byte</span>[] fileContent = java.util.Base64.<span class="ST3">getDecoder</span>().decode(dataUrl.split(<span class="string">&quot;</span><span class="string">,</span><span class="string">&quot;</span>)[1]);
+324                     <span class="literal">try</span> (FileOutputStream fos = <span class="literal">new</span> FileOutputStream(getFileName())) {
+325                         fos.write(fileContent);
+326                     }
+327                     <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Stored prescript {} on attempt {}</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">id</span>, attempt);
+328                     <span class="literal">return</span> <span class="literal">this</span>;
+329                 } <span class="literal">catch</span> (IOException e) {
+330                     <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Store attempt {} failed for ID {}: {}</span><span class="string">&quot;</span>, attempt, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">id</span>, e.getMessage());
+331                     <span class="literal">if</span> (attempt == 3) {
+332                         <span class="ST2">logger</span>.error(<span class="string">&quot;</span><span class="string">Failed to store prescript {} after 3 attempts</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">id</span>);
+333                         <span class="literal">try</span> (FileWriter fw = <span class="literal">new</span> FileWriter(<span class="string">&quot;</span><span class="string">failed_ids.txt</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">rue</span>)) {
+334                             fw.write(<span class="string">&quot;</span><span class="string">ID: </span><span class="string">&quot;</span> + <span class="literal">this</span>.<span class="ST4">id</span> + <span class="string">&quot;</span><span class="string">, Error: Failed to store after 3 attempts</span><span class="ST5">\n</span><span class="string">&quot;</span>);
+335                         } <span class="literal">catch</span> (IOException ex) {
+336                             <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Failed to write to failed_ids.txt for ID {}: {}</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">id</span>, ex.getMessage());
+337                         }
+338                     }
+339                     <span class="literal">try</span> {
+340                         Thread.<span class="ST3">sleep</span>(1000 + (<span class="literal">long</span>) (Math.<span class="ST3">random</span>() * 1000));
+341                     } <span class="literal">catch</span> (InterruptedException ie) {
+342                         Thread.<span class="ST3">currentThread</span>().interrupt();
+343                     }
+344                 }
+345             }
+346         }
+347         <span class="literal">return</span> <span class="literal">this</span>;
+348     }
+349 
+350     <span class="literal">protected</span> <span class="literal">boolean</span> <span class="ST1">mkDir</span>() {
+351         File md = <span class="literal">new</span> File(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">storePrescriptTo</span>);
+352         <span class="literal">if</span> (md.exists()) {
+353             <span class="literal">return</span> md.isDirectory();
+354         }
+355         <span class="literal">return</span> md.mkdirs();
+356     }
+357 
+358     <span class="literal">protected</span> <span class="literal">boolean</span> <span class="ST1">isExists</span>(String fn) {
+359         File f = <span class="literal">new</span> File(fn);
+360         <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">isExists ⮕ ({}, {})</span><span class="string">&quot;</span>, f.exists(), f.canRead());
+361         <span class="literal">return</span> f.exists() &amp;&amp; f.canRead();
+362     }
+363 
+364     <span class="literal">public</span> GetPrescript <span class="ST1">setOrigFileName</span>(String fileName) {
+365         <span class="literal">this</span>.<span class="ST4">origFileName</span> = fileName;
+366         <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Setting origFileName to {} for ID {}</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">origFileName</span>, <span class="ST4">i</span><span class="ST4">d</span>);
+367         <span class="literal">return</span> <span class="literal">this</span>;
+368     }
+369 
+370     <span class="literal">public</span> String <span class="ST1">getOrigFileName</span>() {
+371         <span class="literal">return</span> <span class="literal">this</span>.<span class="ST4">origFileName</span>;
+372     }
+373 
+374     <span class="literal">public</span> String <span class="ST1">getFileName</span>() {
+375         String fileName = <span class="literal">this</span>.<span class="ST4">storePrescriptTo</span> + <span class="literal">this</span>.<span class="ST4">id</span> + <span class="string">&quot;</span><span class="string">~</span><span class="string">&quot;</span> + (<span class="ST4">origFileName</span> != <span class="literal">null</span> ? <span class="ST4">origFileName</span> : <span class="literal">this</span>.<span class="ST4">id</span> + <span class="string">&quot;</span><span class="string">_prescript.txt</span><span class="string">&quot;</span>);
+376         <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">getFileName ⮕ {} ⮕ {}</span><span class="string">&quot;</span>, fileName, isExists(fileName));
+377         <span class="literal">return</span> fileName;
+378     }
+379 
+380     <span class="literal">public</span> <span class="literal">boolean</span> <span class="ST1">isLocalRead</span>() {
+381         <span class="literal">return</span> <span class="literal">this</span>.<span class="ST4">localRead</span>;
+382     }
+383 
+384 }
+385 
+</pre></body>
+</html>

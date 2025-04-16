@@ -1,0 +1,210 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>Cip_gov_ua_getter.java</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<style type="text/css">
+<!--
+body {color: #000000; background-color: #ffffff; font-family: monospace}
+pre {color: #000000; background-color: #ffffff; font-family: monospace}
+table {color: #000000; background-color: #e9e8e2; font-family: monospace}
+.ST0 {color: #969696; font-family: monospace; font-weight: bold}
+.ST1 {font-family: monospace; font-weight: bold}
+.comment {color: #969696}
+.ST4 {font-family: monospace; font-weight: bold; font-style: italic}
+.ST2 {color: #009900; font-family: monospace; font-style: italic}
+.ST3 {font-family: monospace; font-style: italic}
+.literal {color: #0000e6}
+.ST5 {color: #ce7b00; font-family: monospace; font-weight: bold}
+.string {color: #ce7b00}
+-->
+</style>
+</head>
+<body>
+<table width="100%"><tr><td align="center">/home/olden/NetBeansProjects/cip_gov_ua_getter/src/main/java/net/ukrcom/cip_gov_ua_getter/Cip_gov_ua_getter.java</td></tr></table>
+<pre>
+  1 <span class="comment">/*</span>
+  2 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt</span><span class="comment"> to change this license</span>
+  3 <span class="comment"> */</span>
+  4 <span class="literal">package</span> net.ukrcom.cip_gov_ua_getter;
+  5 
+  6 <span class="literal">import</span> java.io.FileInputStream;
+  7 <span class="literal">import</span> java.io.IOException;
+  8 <span class="literal">import</span> java.io.InputStream;
+  9 <span class="literal">import</span> java.nio.file.Files;
+ 10 <span class="literal">import</span> java.nio.file.attribute.FileTime;
+ 11 <span class="literal">import</span> java.time.LocalDateTime;
+ 12 <span class="literal">import</span> java.time.ZoneId;
+ 13 <span class="literal">import</span> java.time.format.DateTimeFormatter;
+ 14 <span class="literal">import</span> java.time.format.DateTimeParseException;
+ 15 <span class="literal">import</span> java.util.Properties;
+ 16 <span class="literal">import</span> org.json.JSONArray;
+ 17 <span class="literal">import</span> org.json.JSONException;
+ 18 <span class="literal">import</span> org.json.JSONObject;
+ 19 <span class="literal">import</span> org.slf4j.Logger;
+ 20 <span class="literal">import</span> org.slf4j.LoggerFactory;
+ 21 <span class="literal">import</span> ch.qos.logback.classic.Level;
+ 22 <span class="literal">import</span> java.io.File;
+ 23 
+ 24 <span class="comment">/**</span>
+ 25 <span class="comment"> * </span><span class="ST0">Консольна</span> <span class="ST0">утиліта</span> <span class="ST0">для</span> <span class="ST0">збору</span> <span class="ST0">та</span> <span class="ST0">обробки</span> <span class="ST0">розпоряджень</span> <span class="ST0">про</span> <span class="ST0">блокування</span> <span class="ST0">доменів</span><span class="ST0">.</span>
+ 26 <span class="comment"> *</span>
+ 27 <span class="comment"> * </span><span class="ST0">@author</span> <span class="comment">olden</span>
+ 28  <span class="comment">*/</span>
+ 29 <span class="literal">public</span> <span class="literal">class</span> <span class="ST1">Cip_gov_ua_getter</span> {
+ 30 
+ 31     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">final</span> Logger <span class="ST2">logger</span> = LoggerFactory.<span class="ST3">getLogger</span>(Cip_gov_ua_getter.<span class="literal">class</span>);
+ 32     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">final</span> DateTimeFormatter <span class="ST2">ISO_FORMATTER</span> = DateTimeFormatter.<span class="ST2">ISO_DATE_TIME</span>;
+ 33 
+ 34     <span class="comment">/**</span>
+ 35 <span class="comment">     * </span><span class="ST0">Основний</span> <span class="ST0">процес</span><span class="ST0">.</span>
+ 36 <span class="comment">     *</span>
+ 37 <span class="comment">     * </span><span class="ST0">@param</span> args <span class="comment">аргументи</span> <span class="comment">командного</span> <span class="comment">рядка</span><span class="comment">: </span><span class="comment">шлях</span> <span class="comment">до</span> <span class="comment">cip</span><span class="comment">.</span><span class="comment">gov</span><span class="comment">.</span><span class="comment">ua</span><span class="comment">.</span><span class="comment">properties</span>
+ 38 <span class="comment">     * (</span><span class="comment">опціонально</span><span class="comment">), --</span><span class="comment">debug</span> <span class="comment">або</span><span class="comment"> -</span><span class="comment">d</span> <span class="comment">для</span> <span class="comment">вмикання</span> <span class="comment">дебаг</span><span class="comment">-</span><span class="comment">логів</span>
+ 39      <span class="comment">*/</span>
+ 40     <span class="literal">public</span> <span class="literal">static</span> <span class="literal">void</span> <span class="ST4">main</span>(String[] args) {
+ 41         <span class="comment">// Налаштування дебаг-логування</span>
+ 42         <span class="literal">boolean</span> debug = <span class="literal">false</span>;
+ 43         String configPath = <span class="string">&quot;</span><span class="string">cip.gov.ua.properties</span><span class="string">&quot;</span>;
+ 44 
+ 45         <span class="literal">for</span> (String arg : args) {
+ 46             <span class="literal">if</span> (arg.equals(<span class="string">&quot;</span><span class="string">--debug</span><span class="string">&quot;</span>) || arg.equals(<span class="string">&quot;</span><span class="string">-d</span><span class="string">&quot;</span>)) {
+ 47                 debug = <span class="literal">true</span>;
+ 48             } <span class="literal">else</span> <span class="literal">if</span> (!arg.isEmpty()) {
+ 49                 configPath = arg;
+ 50             }
+ 51         }
+ 52 
+ 53         <span class="literal">if</span> (debug) {
+ 54             ch.qos.logback.classic.Logger rootLogger
+ 55                     = (ch.qos.logback.classic.Logger) LoggerFactory.<span class="ST3">getLogger</span>(Logger.<span class="ST2">ROOT_LOGGER_NAME</span>);
+ 56             rootLogger.setLevel(Level.<span class="ST2">DEBUG</span>);
+ 57             <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Debug logging enabled</span><span class="string">&quot;</span>);
+ 58         }
+ 59 
+ 60         <span class="literal">try</span> {
+ 61             <span class="comment">// Завантаження конфігурації</span>
+ 62             Properties prop = <span class="literal">new</span> Properties();
+ 63             <span class="literal">try</span> (InputStream input = <span class="literal">new</span> FileInputStream(configPath)) {
+ 64                 prop.load(input);
+ 65                 <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Loaded configuration from: {}</span><span class="string">&quot;</span>, configPath);
+ 66             } <span class="literal">catch</span> (IOException e) {
+ 67                 <span class="ST2">logger</span>.error(<span class="string">&quot;</span><span class="string">Failed to load config from {}: {}</span><span class="string">&quot;</span>, configPath, e.getMessage(), e);
+ 68                 <span class="literal">throw</span> <span class="literal">new</span> RuntimeException(<span class="string">&quot;</span><span class="string">Failed to load config</span><span class="string">&quot;</span>, e);
+ 69             }
+ 70 
+ 71             prop.setProperty(<span class="string">&quot;</span><span class="string">debug</span><span class="string">&quot;</span>, debug ? <span class="string">&quot;</span><span class="string">true</span><span class="string">&quot;</span> : <span class="string">&quot;</span><span class="string">false</span><span class="string">&quot;</span>);
+ 72 
+ 73             BlockedObjects bo = <span class="literal">new</span> BlockedObjects(prop).getBlockedDomainNames();
+ 74 
+ 75             CGUGetter cguGetter = <span class="literal">new</span> CGUGetter(prop);
+ 76             ParseCGUArticlesJson parseCGUArticlesJson = <span class="literal">new</span> ParseCGUArticlesJson(cguGetter.getJsonBody());
+ 77 
+ 78             JSONArray posts = parseCGUArticlesJson.getPosts();
+ 79             <span class="literal">if</span> (posts.isEmpty()) {
+ 80                 <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">No posts found in JSON response</span><span class="string">&quot;</span>);
+ 81                 bo.storeState();
+ 82                 <span class="literal">return</span>;
+ 83             }
+ 84             <span class="literal">for</span> (<span class="literal">int</span> i = 0; i &lt; posts.length(); i++) {
+ 85                 JSONObject post = posts.getJSONObject(i);
+ 86                 String title = post.getString(<span class="string">&quot;</span><span class="string">title</span><span class="string">&quot;</span>);
+ 87 
+ 88                 <span class="comment">// Ігноруємо непубліковані пости</span>
+ 89                 <span class="literal">if</span> (!post.getString(<span class="string">&quot;</span><span class="string">status</span><span class="string">&quot;</span>).equalsIgnoreCase(<span class="string">&quot;</span><span class="string">PUBLISHED</span><span class="string">&quot;</span>)) {
+ 90                     <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Skipping unpublished post: {} - {}</span><span class="string">&quot;</span>, post.getString(<span class="string">&quot;</span><span class="string">date</span><span class="string">&quot;</span>), title);
+ 91                     <span class="literal">continue</span>;
+ 92                 }
+ 93 
+ 94                 <span class="comment">// Перевіряємо, чи пост стосується блокування/обмеження</span>
+ 95                 <span class="literal">if</span> (!(title.matches(<span class="string">&quot;</span><span class="string">.*блокування.*</span><span class="string">&quot;</span>) || title.matches(<span class="string">&quot;</span><span class="string">.*обмеження доступу.*</span><span class="string">&quot;</span>))) {
+ 96                     <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Skipping unrelated post: {} - {}</span><span class="string">&quot;</span>, post.getString(<span class="string">&quot;</span><span class="string">date</span><span class="string">&quot;</span>), title);
+ 97                     <span class="literal">continue</span>;
+ 98                 }
+ 99 
+100                 <span class="comment">// Визначаємо дію (блокувати чи розблокувати)</span>
+101                 <span class="literal">boolean</span> block = !title.matches(<span class="string">&quot;</span><span class="string">.*розблокування.*</span><span class="string">&quot;</span>) &amp;&amp; !title.matches(<span class="string">&quot;</span><span class="string">.*припинення тимчасового.*</span><span class="string">&quot;</span>);
+102 
+103                 <span class="comment">// Обробляємо вкладення</span>
+104                 JSONArray postAttachments = post.getJSONArray(<span class="string">&quot;</span><span class="string">attachments</span><span class="string">&quot;</span>);
+105                 <span class="literal">for</span> (<span class="literal">int</span> j = 0; j &lt; postAttachments.length(); j++) {
+106                     JSONObject attachment = postAttachments.getJSONObject(j);
+107                     String id = String.<span class="ST3">valueOf</span>(attachment.getInt(<span class="string">&quot;</span><span class="string">id</span><span class="string">&quot;</span>));
+108                     String mimeType = attachment.getString(<span class="string">&quot;</span><span class="string">mimeType</span><span class="string">&quot;</span>);
+109                     String fileName = attachment.getString(<span class="string">&quot;</span><span class="string">originalFileName</span><span class="string">&quot;</span>);
+110 
+111                     GetPrescript gp = <span class="literal">new</span> GetPrescript(prop, id, mimeType)
+112                             .setOrigFileName(fileName)
+113                             .getPrescriptFrom()
+114                             .storePrescriptTo();
+115 
+116                     <span class="comment">// Оновлюємо дату файлу відповідно до post.date</span>
+117                     <span class="ST3">setFileDate</span>(<span class="literal">new</span> File(gp.getFileName()), post.getString(<span class="string">&quot;</span><span class="string">date</span><span class="string">&quot;</span>));
+118 
+119                     <span class="literal">if</span> (!mimeType.equalsIgnoreCase(<span class="string">&quot;</span><span class="string">text/plain</span><span class="string">&quot;</span>)) {
+120                         <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">{} {} {} {} </span><span class="ST5">\&quot;</span><span class="string">{}</span><span class="ST5">\&quot;</span><span class="string">&quot;</span>,
+121                                 LocalDateTime.<span class="ST3">now</span>(), post.getString(<span class="string">&quot;</span><span class="string">date</span><span class="string">&quot;</span>), block ? <span class="string">&quot;</span><span class="string">+</span><span class="string">&quot;</span> : <span class="string">&quot;</span><span class="string">-</span><span class="string">&quot;</span>, id, fileName);
+122                         <span class="literal">continue</span>;
+123                     }
+124 
+125                     <span class="literal">for</span> (String domain : gp.getBodyPrescript()) {
+126                         BlockedDomain bd = <span class="literal">new</span> BlockedDomain(domain, block, post.getString(<span class="string">&quot;</span><span class="string">date</span><span class="string">&quot;</span>));
+127                         <span class="literal">if</span> (bo.addBlockedDomainName(bd)) {
+128                             <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">{} {} [ {} </span><span class="ST5">\&quot;</span><span class="string">{}</span><span class="ST5">\&quot;</span><span class="string">]</span><span class="string">&quot;</span>,
+129                                     LocalDateTime.<span class="ST3">now</span>(), bd, id, fileName);
+130                         }
+131                     }
+132 
+133                     <span class="literal">if</span> (!gp.isLocalRead()) {
+134                         <span class="literal">try</span> {
+135                             Thread.<span class="ST3">sleep</span>(1000 + (<span class="literal">long</span>) (Math.<span class="ST3">random</span>() * 1000)); <span class="comment">// 1-2 секунди</span>
+136                         } <span class="literal">catch</span> (InterruptedException e) {
+137                             <span class="ST2">logger</span>.error(<span class="string">&quot;</span><span class="string">Interrupted during delay: {}</span><span class="string">&quot;</span>, e.getMessage(), e);
+138                             Thread.<span class="ST3">currentThread</span>().interrupt();
+139                         }
+140                     }
+141                 }
+142             }
+143 
+144             <span class="comment">// Зберігаємо результати</span>
+145             bo.storeState();
+146             <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Successfully stored blocked domains state</span><span class="string">&quot;</span>);
+147 
+148         } <span class="literal">catch</span> (IOException e) {
+149             <span class="ST2">logger</span>.error(<span class="string">&quot;</span><span class="string">Failed to process articles: {}</span><span class="string">&quot;</span>, e.getMessage(), e);
+150             <span class="literal">throw</span> <span class="literal">new</span> RuntimeException(<span class="string">&quot;</span><span class="string">Failed to process articles</span><span class="string">&quot;</span>, e);
+151         } <span class="literal">catch</span> (JSONException e) {
+152             <span class="ST2">logger</span>.error(<span class="string">&quot;</span><span class="string">Failed to parse JSON: {}</span><span class="string">&quot;</span>, e.getMessage(), e);
+153             <span class="literal">throw</span> <span class="literal">new</span> RuntimeException(<span class="string">&quot;</span><span class="string">Failed to parse JSON</span><span class="string">&quot;</span>, e);
+154         }
+155     }
+156 
+157     <span class="comment">/**</span>
+158 <span class="comment">     * </span><span class="ST0">Встановлює</span> <span class="ST0">дату</span> <span class="ST0">модифікації</span> <span class="ST0">файлу</span> <span class="ST0">на</span> <span class="ST0">основі</span> <span class="ST0">дати</span> <span class="ST0">з</span> <span class="ST0">поста</span><span class="ST0">.</span> <span class="comment">Нічого</span> <span class="comment">не</span>
+159 <span class="comment">     * </span><span class="comment">робить</span><span class="comment">, </span><span class="comment">якщо</span> <span class="comment">файл</span> <span class="comment">недоступний</span> <span class="comment">або</span> <span class="comment">дата</span> <span class="comment">некоректна</span><span class="comment">.</span>
+160 <span class="comment">     *</span>
+161 <span class="comment">     * </span><span class="ST0">@param</span> file <span class="comment">файл</span> <span class="comment">для</span> <span class="comment">оновлення</span>
+162 <span class="comment">     * </span><span class="ST0">@param</span> dateStr <span class="comment">дата</span> <span class="comment">у</span> <span class="comment">форматі</span> <span class="comment">ISO</span><span class="comment"> 8601 (</span><span class="comment">наприклад</span><span class="comment">,</span>
+163 <span class="comment">     * &quot;2023-12-07</span><span class="comment">T10</span><span class="comment">:44:00</span><span class="comment">Z</span><span class="comment">&quot;)</span>
+164      <span class="comment">*/</span>
+165     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">void</span> <span class="ST4">setFileDate</span>(File file, String dateStr) {
+166         <span class="literal">if</span> (!file.exists() || !file.canWrite()) {
+167             <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Cannot set date for file {}: file does not exist or is not writable</span><span class="string">&quot;</span>, file.getAbsolutePath());
+168             <span class="literal">return</span>;
+169         }
+170 
+171         <span class="literal">try</span> {
+172             LocalDateTime dateTime = LocalDateTime.<span class="ST3">parse</span>(dateStr, <span class="ST2">I</span><span class="ST2">SO_FORMATTER</span>);
+173             <span class="literal">long</span> millis = dateTime.atZone(ZoneId.<span class="ST3">systemDefault</span>()).toInstant().toEpochMilli();
+174             Files.<span class="ST3">setLastModifiedTime</span>(file.toPath(), FileTime.<span class="ST3">fromMillis</span>(millis));
+175             <span class="ST2">logger</span>.debug(<span class="string">&quot;</span><span class="string">Set file date for {} to {}</span><span class="string">&quot;</span>, file.getAbsolutePath(), dateStr);
+176         } <span class="literal">catch</span> (DateTimeParseException e) {
+177             <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Failed to parse date &#39;{}&#39; for file {}: {}</span><span class="string">&quot;</span>, dateStr, file.getAbsolutePath(), e.getMessage());
+178         } <span class="literal">catch</span> (IOException e) {
+179             <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">Failed to set date for file {}: {}</span><span class="string">&quot;</span>, file.getAbsolutePath(), e.getMessage());
+180         }
+181     }
+182 }
+183 
+</pre></body>
+</html>

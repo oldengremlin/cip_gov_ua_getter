@@ -1,0 +1,90 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>BlockedDomainComparator.java</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<style type="text/css">
+<!--
+body {color: #000000; background-color: #ffffff; font-family: monospace}
+pre {color: #000000; background-color: #ffffff; font-family: monospace}
+table {color: #000000; background-color: #e9e8e2; font-family: monospace}
+.ST0 {color: #969696; font-family: monospace; font-weight: bold}
+.ST1 {font-family: monospace; font-weight: bold}
+.comment {color: #969696}
+.ST2 {font-family: monospace; font-style: italic}
+.literal {color: #0000e6}
+-->
+</style>
+</head>
+<body>
+<table width="100%"><tr><td align="center">/home/olden/NetBeansProjects/cip_gov_ua_getter/src/main/java/net/ukrcom/cip_gov_ua_getter/BlockedDomainComparator.java</td></tr></table>
+<pre>
+ 1 <span class="comment">/*</span>
+ 2 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt</span><span class="comment"> to change this license</span>
+ 3 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java</span><span class="comment"> to edit this template</span>
+ 4 <span class="comment"> */</span>
+ 5 <span class="literal">package</span> net.ukrcom.cip_gov_ua_getter;
+ 6 
+ 7 <span class="literal">import</span> java.time.ZoneOffset;
+ 8 <span class="literal">import</span> java.util.Comparator;
+ 9 
+10 <span class="comment">/**</span>
+11 <span class="comment"> * </span><span class="ST0">Компаратор</span> <span class="ST0">для</span> <span class="ST0">формування</span> <span class="ST0">TreeSet</span> <span class="ST0">з</span> <span class="ST0">об</span><span class="ST0">&#39;</span><span class="ST0">єктів</span> <span class="ST0">jBlockedDomain</span><span class="ST0">.</span> <span class="comment">Порядок</span>
+12 <span class="comment"> * </span><span class="comment">сортування</span> <span class="comment">задається</span> <span class="comment">по</span> <span class="comment">імені</span> <span class="comment">домена</span><span class="comment">, </span><span class="comment">як</span> <span class="comment">основному</span> <span class="comment">крітерію</span><span class="comment">, </span><span class="comment">далі</span> <span class="comment">по</span> <span class="comment">даті</span> <span class="comment">та</span>
+13 <span class="comment"> * </span><span class="comment">часу</span> <span class="comment">видання</span> <span class="comment">розпорядження</span><span class="comment">.</span> <span class="comment">Якщо</span> <span class="comment">ж</span> <span class="comment">дата</span> <span class="comment">та</span> <span class="comment">час</span> <span class="comment">збігаються</span> <span class="comment">то</span> <span class="comment">першим</span> <span class="comment">стає</span>
+14 <span class="comment"> * </span><span class="comment">розпорядження</span><span class="comment">, </span><span class="comment">що</span> <span class="comment">блокує</span> <span class="comment">домен</span><span class="comment">.</span>
+15 <span class="comment"> *</span>
+16 <span class="comment"> * </span><span class="ST0">@author</span> <span class="comment">olden</span>
+17  <span class="comment">*/</span>
+18 <span class="literal">public</span> <span class="literal">class</span> <span class="ST1">BlockedDomainComparator</span> <span class="literal">implements</span> Comparator {
+19 
+20     @Override
+21     <span class="literal">public</span> <span class="literal">int</span> <span class="ST1">compare</span>(Object o1, Object o2) {
+22         BlockedDomain d1 = (BlockedDomain) o1;
+23         BlockedDomain d2 = (BlockedDomain) o2;
+24         <span class="literal">int</span> compare = d1.getDomainName().compareTo(d2.getDomainName());
+25         <span class="literal">if</span> (compare != 0) {
+26             <span class="literal">return</span> compare;
+27         }
+28         compare = d1.getDateTime().compareTo(d2.getDateTime());
+29         <span class="literal">if</span> (compare != 0) {
+30             <span class="literal">return</span> compare;
+31         }
+32         <span class="literal">return</span> Boolean.<span class="ST2">compare</span>(d1.getIsBlocked(), d2.getIsBlocked());
+33     }
+34     <span class="comment">/*</span>
+35 <span class="comment">    public int compare(Object o1, Object o2) {</span>
+36 
+37 <span class="comment">        int retVal = 0;</span>
+38 
+39 <span class="comment">        BlockedDomain d1 = (BlockedDomain) o1;</span>
+40 <span class="comment">        BlockedDomain d2 = (BlockedDomain) o2;</span>
+41 <span class="comment">        int compareTo = d1.getDomainName().compareTo(d2.getDomainName());</span>
+42 <span class="comment">        compareTo = (compareTo &gt; 0 ? 1 : (compareTo &lt; 0 ? -1 : 0));</span>
+43 
+44 <span class="comment">        if (compareTo != 0) {</span>
+45 <span class="comment">            retVal = compareTo;</span>
+46 <span class="comment">        } else {</span>
+47 <span class="comment">            if (d1.getDateTime().toEpochSecond(ZoneOffset.UTC) &gt; d2.getDateTime().toEpochSecond(ZoneOffset.UTC)) {</span>
+48 <span class="comment">                retVal = 1;</span>
+49 <span class="comment">            } else if (d1.getDateTime().toEpochSecond(ZoneOffset.UTC) &lt; d2.getDateTime().toEpochSecond(ZoneOffset.UTC)) {</span>
+50 <span class="comment">                retVal = -1;</span>
+51 <span class="comment">            } else {</span>
+52 <span class="comment">                if (d1.getIsBlocked() &amp;&amp; !d2.getIsBlocked()) {</span>
+53 <span class="comment">                    retVal = 1;</span>
+54 <span class="comment">                } else if (!d1.getIsBlocked() &amp;&amp; d2.getIsBlocked()) {</span>
+55 <span class="comment">                    retVal = -1;</span>
+56 <span class="comment">                } else {</span>
+57 <span class="comment">                    retVal = 0;</span>
+58 <span class="comment">                }</span>
+59 <span class="comment">            }</span>
+60 <span class="comment">        }</span>
+61 
+62 <span class="comment">        return retVal;</span>
+63 <span class="comment">    }</span>
+64 <span class="comment">     */</span>
+65 
+66 }
+67 
+</pre></body>
+</html>

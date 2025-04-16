@@ -1,0 +1,112 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>CGUGetter.java</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<style type="text/css">
+<!--
+body {color: #000000; background-color: #ffffff; font-family: monospace}
+pre {color: #000000; background-color: #ffffff; font-family: monospace}
+table {color: #000000; background-color: #e9e8e2; font-family: monospace}
+.ST0 {color: #969696; font-family: monospace; font-weight: bold}
+.ST1 {font-family: monospace; font-weight: bold}
+.comment {color: #969696}
+.ST4 {color: #009900}
+.ST2 {color: #009900; font-family: monospace; font-style: italic}
+.ST3 {font-family: monospace; font-style: italic}
+.literal {color: #0000e6}
+.ST5 {color: #ce7b00; font-family: monospace; font-weight: bold}
+.string {color: #ce7b00}
+-->
+</style>
+</head>
+<body>
+<table width="100%"><tr><td align="center">/home/olden/NetBeansProjects/cip_gov_ua_getter/src/main/java/net/ukrcom/cip_gov_ua_getter/CGUGetter.java</td></tr></table>
+<pre>
+ 1 <span class="comment">/*</span>
+ 2 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt</span><span class="comment"> to change this license</span>
+ 3 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java</span><span class="comment"> to edit this template</span>
+ 4 <span class="comment"> */</span>
+ 5 <span class="literal">package</span> net.ukrcom.cip_gov_ua_getter;
+ 6 
+ 7 <span class="literal">import</span> com.microsoft.playwright.*;
+ 8 <span class="literal">import</span> java.util.Map;
+ 9 <span class="literal">import</span> java.util.Properties;
+10 <span class="literal">import</span> org.slf4j.Logger;
+11 <span class="literal">import</span> org.slf4j.LoggerFactory;
+12 
+13 <span class="comment">/**</span>
+14 <span class="comment"> * </span><span class="ST0">Клас</span> <span class="ST0">реалізує</span> <span class="ST0">зчитування</span> <span class="ST0">розпоряджень</span> <span class="ST0">щодо</span> <span class="ST0">блокування</span> <span class="ST0">доменів</span> <span class="ST0">через</span> <span class="ST0">API</span><span class="ST0">.</span>
+15 <span class="comment"> *</span>
+16 <span class="comment"> * </span><span class="ST0">@author</span> <span class="comment">olden</span>
+17  <span class="comment">*/</span>
+18 <span class="literal">public</span> <span class="literal">class</span> <span class="ST1">CGUGetter</span> {
+19 
+20     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">final</span> Logger <span class="ST2">logger</span> = LoggerFactory.<span class="ST3">getLogger</span>(CGUGetter.<span class="literal">class</span>);
+21 
+22     <span class="literal">protected</span> <span class="literal">final</span> String <span class="ST4">urlArticles</span>;
+23     <span class="literal">protected</span> String <span class="ST4">jsonBodyArticles</span>;
+24     <span class="literal">private</span> <span class="literal">final</span> String <span class="ST4">userAgent</span>;
+25     <span class="literal">private</span> <span class="literal">final</span> String <span class="ST4">secChUa</span>;
+26 
+27     <span class="comment">/**</span>
+28 <span class="comment">     * </span><span class="ST0">Конструктор</span> <span class="ST0">класа</span><span class="ST0">.</span> <span class="comment">Підключаємося</span> <span class="comment">до</span> <span class="comment">API</span> <span class="comment">і</span> <span class="comment">зчитуємо</span> <span class="comment">отримані</span> <span class="comment">дані</span><span class="comment">,</span>
+29 <span class="comment">     * </span><span class="comment">формуючи</span> <span class="comment">з</span> <span class="comment">них</span> <span class="comment">правильний</span> <span class="comment">JSON</span><span class="comment">, </span><span class="comment">для</span> <span class="comment">подальшого</span> <span class="comment">аналізу</span><span class="comment">.</span>
+30 <span class="comment">     *</span>
+31 <span class="comment">     * </span><span class="ST0">@param</span> p<span class="comment"> - </span><span class="comment">об</span><span class="comment">&#39;</span><span class="comment">єкт</span> <span class="comment">властивостей</span><span class="comment">.</span>
+32      <span class="comment">*/</span>
+33     <span class="literal">public</span> <span class="ST1">CGUGetter</span>(Properties p) {
+34         <span class="literal">this</span>.<span class="ST4">urlArticles</span> = p.getProperty(
+35                 <span class="string">&quot;</span><span class="string">urlArticles</span><span class="string">&quot;</span>,
+36                 <span class="string">&quot;</span><span class="string">https://cip.gov.ua/services/cm/api/articles?page=0&amp;size=1000&amp;tagId=60751</span><span class="string">&quot;</span>
+37         ).trim();
+38         <span class="literal">this</span>.<span class="ST4">userAgent</span> = p.getProperty(
+39                 <span class="string">&quot;</span><span class="string">userAgent</span><span class="string">&quot;</span>,
+40                 <span class="string">&quot;</span><span class="string">Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36</span><span class="string">&quot;</span>
+41         ).trim();
+42         <span class="literal">this</span>.<span class="ST4">secChUa</span> = p.getProperty(
+43                 <span class="string">&quot;</span><span class="string">secChUa</span><span class="string">&quot;</span>,
+44                 <span class="string">&quot;</span><span class="ST5">\&quot;</span><span class="string">Chromium</span><span class="ST5">\&quot;</span><span class="string">;v=</span><span class="ST5">\&quot;</span><span class="string">129</span><span class="ST5">\&quot;</span><span class="string">, </span><span class="ST5">\&quot;</span><span class="string">Not:A-Brand</span><span class="ST5">\&quot;</span><span class="string">;v=</span><span class="ST5">\&quot;</span><span class="string">24</span><span class="ST5">\&quot;</span><span class="string">, </span><span class="ST5">\&quot;</span><span class="string">Google Chrome</span><span class="ST5">\&quot;</span><span class="string">;v=</span><span class="ST5">\&quot;</span><span class="string">129</span><span class="ST5">\&quot;</span><span class="string">&quot;</span>
+45         ).trim();
+46 
+47         <span class="literal">try</span> (Playwright playwright = Playwright.<span class="ST3">create</span>(); Browser browser = playwright.chromium().launch(<span class="literal">n</span><span class="literal">ew</span> BrowserType.LaunchOptions().setHeadless(<span class="literal">t</span><span class="literal">rue</span>).setChannel(<span class="string">&quot;</span><span class="string">chrome</span><span class="string">&quot;</span>))) {
+48             BrowserContext context = browser.newContext(<span class="literal">n</span><span class="literal">ew</span> Browser.NewContextOptions()
+49                     .setUserAgent(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">userAgent</span>)
+50                     .setLocale(<span class="string">&quot;</span><span class="string">uk-UA</span><span class="string">&quot;</span>)
+51                     .setExtraHTTPHeaders(Map.<span class="ST3">of</span>(
+52                             <span class="string">&quot;</span><span class="string">Accept</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">application/json, text/plain, */*</span><span class="string">&quot;</span>,
+53                             <span class="string">&quot;</span><span class="string">Accept-Language</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">uk,en-US;q=0.9,en;q=0.8,ru;q=0.7</span><span class="string">&quot;</span>,
+54                             <span class="string">&quot;</span><span class="string">Sec-Ch-Ua</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">secChUa</span>,
+55                             <span class="string">&quot;</span><span class="string">Sec-Fetch-Dest</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">empty</span><span class="string">&quot;</span>,
+56                             <span class="string">&quot;</span><span class="string">Sec-Fetch-Mode</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">cors</span><span class="string">&quot;</span>,
+57                             <span class="string">&quot;</span><span class="string">Sec-Fetch-Site</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">same-origin</span><span class="string">&quot;</span>
+58                     )));
+59 
+60             Page page = context.newPage();
+61 
+62             Response response = page.waitForResponse(
+63                     r -&gt; r.url().contains(<span class="string">&quot;</span><span class="string">articles</span><span class="string">&quot;</span>),
+64                     () -&gt; page.navigate(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">urlArticles</span>)
+65             );
+66 
+67             String rawResponse = response.text();
+68             <span class="literal">this</span>.<span class="ST4">jsonBodyArticles</span> = <span class="string">&quot;</span><span class="string">{ </span><span class="ST5">\&quot;</span><span class="string">posts</span><span class="ST5">\&quot;</span><span class="string">: </span><span class="string">&quot;</span> + rawResponse + <span class="string">&quot;</span><span class="string"> }</span><span class="string">&quot;</span>;
+69             <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Successfully fetched articles for URL: {}</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">urlArticles</span>);
+70         } <span class="literal">catch</span> (Exception e) {
+71             <span class="ST2">logger</span>.error(<span class="string">&quot;</span><span class="string">Failed to fetch articles: {}</span><span class="string">&quot;</span>, e.getMessage(), e);
+72             <span class="literal">throw</span> <span class="literal">new</span> RuntimeException(<span class="string">&quot;</span><span class="string">Failed to fetch articles: </span><span class="string">&quot;</span> + e.getMessage(), e);
+73         }
+74     }
+75 
+76     <span class="comment">/**</span>
+77 <span class="comment">     * </span><span class="ST0">Повертає</span> <span class="ST0">зчитаний</span> <span class="ST0">JSON</span><span class="ST0">, </span><span class="ST0">для</span> <span class="ST0">подальшого</span> <span class="ST0">аналізу</span><span class="ST0">.</span>
+78 <span class="comment">     *</span>
+79 <span class="comment">     * </span><span class="ST0">@return</span>
+80      <span class="comment">*/</span>
+81     <span class="literal">public</span> String <span class="ST1">getJsonBody</span>() {
+82         <span class="literal">return</span> <span class="literal">this</span>.<span class="ST4">jsonBodyArticles</span>;
+83     }
+84 }
+85 
+</pre></body>
+</html>

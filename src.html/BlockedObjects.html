@@ -1,0 +1,166 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>BlockedObjects.java</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<style type="text/css">
+<!--
+body {color: #000000; background-color: #ffffff; font-family: monospace}
+pre {color: #000000; background-color: #ffffff; font-family: monospace}
+table {color: #000000; background-color: #e9e8e2; font-family: monospace}
+.ST0 {color: #969696; font-family: monospace; font-weight: bold}
+.ST1 {font-family: monospace; font-weight: bold}
+.comment {color: #969696}
+.ST4 {color: #009900}
+.ST2 {color: #009900; font-family: monospace; font-style: italic}
+.ST3 {font-family: monospace; font-style: italic}
+.literal {color: #0000e6}
+.string {color: #ce7b00}
+-->
+</style>
+</head>
+<body>
+<table width="100%"><tr><td align="center">/home/olden/NetBeansProjects/cip_gov_ua_getter/src/main/java/net/ukrcom/cip_gov_ua_getter/BlockedObjects.java</td></tr></table>
+<pre>
+  1 <span class="comment">/*</span>
+  2 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt</span><span class="comment"> to change this license</span>
+  3 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java</span><span class="comment"> to edit this template</span>
+  4 <span class="comment"> */</span>
+  5 <span class="literal">package</span> net.ukrcom.cip_gov_ua_getter;
+  6 
+  7 <span class="literal">import</span> java.io.BufferedReader;
+  8 <span class="literal">import</span> java.io.File;
+  9 <span class="literal">import</span> java.io.FileInputStream;
+ 10 <span class="literal">import</span> java.io.FileOutputStream;
+ 11 <span class="literal">import</span> java.io.IOException;
+ 12 <span class="literal">import</span> java.io.InputStreamReader;
+ 13 <span class="literal">import</span> java.io.OutputStreamWriter;
+ 14 <span class="literal">import</span> java.io.PrintWriter;
+ 15 <span class="literal">import</span> java.nio.charset.StandardCharsets;
+ 16 <span class="literal">import</span> java.nio.file.Files;
+ 17 <span class="literal">import</span> java.nio.file.Paths;
+ 18 <span class="literal">import</span> java.util.Properties;
+ 19 <span class="literal">import</span> java.util.TreeSet;
+ 20 <span class="literal">import</span> org.slf4j.Logger;
+ 21 <span class="literal">import</span> org.slf4j.LoggerFactory;
+ 22 
+ 23 <span class="comment">/**</span>
+ 24 <span class="comment"> * </span><span class="ST0">Клас</span> <span class="ST0">формує</span> <span class="ST0">перелік</span> <span class="ST0">доменів</span><span class="ST0">, </span><span class="ST0">що</span> <span class="ST0">підлягають</span> <span class="ST0">блокуванню</span><span class="ST0">.</span>
+ 25 <span class="comment"> *</span>
+ 26 <span class="comment"> * </span><span class="ST0">@author</span> <span class="comment">olden</span>
+ 27  <span class="comment">*/</span>
+ 28 <span class="literal">public</span> <span class="literal">class</span> <span class="ST1">BlockedObjects</span> {
+ 29 
+ 30     <span class="literal">private</span> <span class="literal">static</span> <span class="literal">final</span> Logger <span class="ST2">logger</span> = LoggerFactory.<span class="ST3">getLogger</span>(BlockedObjects.<span class="literal">class</span>);
+ 31 
+ 32     <span class="literal">protected</span> String <span class="ST4">currentPath</span>; <span class="comment">// Current dir</span>
+ 33     <span class="literal">protected</span> String <span class="ST4">currentDir</span>;  <span class="comment">// Current dir using System</span>
+ 34     <span class="literal">private</span> <span class="literal">final</span> String[] <span class="ST4">blockedNames</span>;
+ 35     <span class="literal">private</span> <span class="literal">final</span> String <span class="ST4">blockedResultName</span>;
+ 36     <span class="literal">private</span> <span class="literal">final</span> TreeSet&lt;BlockedDomain&gt; <span class="ST4">blockedDomains</span>;
+ 37 
+ 38     <span class="comment">/**</span>
+ 39 <span class="comment">     * </span><span class="ST0">Конструктор</span> <span class="ST0">класа</span><span class="ST0">.</span>
+ 40 <span class="comment">     *</span>
+ 41 <span class="comment">     * </span><span class="ST0">@param</span> p<span class="comment"> - </span><span class="comment">об</span><span class="comment">&#39;</span><span class="comment">єкт</span> <span class="comment">властивостей</span>
+ 42      <span class="comment">*/</span>
+ 43     <span class="literal">public</span> <span class="ST1">BlockedObjects</span>(Properties p) {
+ 44         <span class="literal">try</span> {
+ 45             <span class="literal">this</span>.<span class="ST4">currentPath</span> = <span class="literal">new</span> File(<span class="string">&quot;</span><span class="string">.</span><span class="string">&quot;</span>).getCanonicalPath();
+ 46             <span class="literal">this</span>.<span class="ST4">currentDir</span> = System.<span class="ST3">getProperty</span>(<span class="string">&quot;</span><span class="string">user.dir</span><span class="string">&quot;</span>);
+ 47         } <span class="literal">catch</span> (IOException ex) {
+ 48             <span class="ST2">logger</span>.error(<span class="string">&quot;</span><span class="string">Failed to initialize paths: {}</span><span class="string">&quot;</span>, ex.getMessage(), ex);
+ 49         }
+ 50 
+ 51         <span class="literal">this</span>.<span class="ST4">blockedNames</span> = p.getProperty(<span class="string">&quot;</span><span class="string">blocked</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">blocked.txt</span><span class="string">&quot;</span>).split(<span class="string">&quot;</span><span class="string">;</span><span class="string">&quot;</span>);
+ 52         <span class="literal">this</span>.<span class="ST4">blockedResultName</span> = p.getProperty(<span class="string">&quot;</span><span class="string">blocked_result</span><span class="string">&quot;</span>, <span class="string">&quot;</span><span class="string">blocked.result.txt</span><span class="string">&quot;</span>);
+ 53         <span class="literal">this</span>.<span class="ST4">blockedDomains</span> = <span class="literal">new</span> TreeSet&lt;&gt;(<span class="literal">new</span> BlockedDomainComparator());
+ 54     }
+ 55 
+ 56     <span class="comment">/**</span>
+ 57 <span class="comment">     * </span><span class="ST0">Зчитує</span> <span class="ST0">перелік</span> <span class="ST0">доменів</span> <span class="ST0">із</span> <span class="ST0">файлів</span><span class="ST0">, </span><span class="ST0">указаних</span> <span class="ST0">у</span> <span class="ST0">властивості</span> <span class="ST0">blocked</span><span class="ST0">.</span> <span class="comment">Додає</span>
+ 58 <span class="comment">     * </span><span class="comment">їх</span> <span class="comment">до</span> <span class="comment">TreeSet</span> <span class="comment">із</span> <span class="comment">датою</span> <span class="comment">за</span> <span class="comment">замовчуванням</span><span class="comment"> (</span><span class="comment">початок</span> <span class="comment">епохи</span><span class="comment">)</span><span class="comment">.</span>
+ 59 <span class="comment">     *</span>
+ 60 <span class="comment">     * </span><span class="ST0">@return</span> <span class="comment">цей</span> <span class="comment">об</span><span class="comment">&#39;</span><span class="comment">єкт</span> <span class="comment">для</span> <span class="comment">ланцюгових</span> <span class="comment">викликів</span>
+ 61 <span class="comment">     * </span><span class="ST0">@throws</span> <span class="comment">IOException</span> <span class="comment">у</span> <span class="comment">разі</span> <span class="comment">помилок</span> <span class="comment">читання</span> <span class="comment">файлів</span>
+ 62      <span class="comment">*/</span>
+ 63     <span class="literal">public</span> BlockedObjects <span class="ST1">getBlockedDomainNames</span>() <span class="literal">throws</span> IOException {
+ 64         <span class="comment">/*</span>
+ 65 <span class="comment">        for (String blockedName : blockedNames) {</span>
+ 66 <span class="comment">            File blockedFile = new File(blockedName.trim());</span>
+ 67 <span class="comment">            if (blockedFile.exists() &amp;&amp; blockedFile.isFile() &amp;&amp; blockedFile.canRead()) {</span>
+ 68 <span class="comment">                logger.info(&quot;Reading blocked domains from {}&quot;, blockedName);</span>
+ 69 <span class="comment">                try (BufferedReader bufferedReader = new BufferedReader(</span>
+ 70 <span class="comment">                        new InputStreamReader(new FileInputStream(blockedFile), &quot;UTF-8&quot;))) {</span>
+ 71 <span class="comment">                    String blockedDomainName;</span>
+ 72 <span class="comment">                    while ((blockedDomainName = bufferedReader.readLine()) != null) {</span>
+ 73 <span class="comment">                        if (!blockedDomainName.trim().isEmpty()) {</span>
+ 74 <span class="comment">                            this.addBlockedDomainName(new BlockedDomain(blockedDomainName.trim()));</span>
+ 75 <span class="comment">                        }</span>
+ 76 <span class="comment">                    }</span>
+ 77 <span class="comment">                }</span>
+ 78 <span class="comment">            } else {</span>
+ 79 <span class="comment">                logger.warn(&quot;File {} does not exist or is not readable&quot;, blockedName);</span>
+ 80 <span class="comment">            }</span>
+ 81 <span class="comment">        }</span>
+ 82 <span class="comment">        return this;</span>
+ 83 <span class="comment">         */</span>
+ 84         <span class="literal">for</span> (String blockedName : <span class="ST4">blockedNames</span>) {
+ 85             File blockedFile = <span class="literal">new</span> File(blockedName.trim());
+ 86             <span class="literal">if</span> (blockedFile.exists() &amp;&amp; blockedFile.isFile() &amp;&amp; blockedFile.canRead()) {
+ 87                 <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Reading blocked domains from {}</span><span class="string">&quot;</span>, blockedName);
+ 88                 Files.<span class="ST3">lines</span>(Paths.<span class="ST3">get</span>(blockedFile.getPath()), StandardCharsets.<span class="ST2">UTF_8</span>)
+ 89                         .map(String::trim)
+ 90                         .filter(line -&gt; !line.isEmpty())
+ 91                         .forEach(line -&gt; <span class="literal">this</span>.addBlockedDomainName(<span class="literal">new</span> BlockedDomain(line)));
+ 92             } <span class="literal">else</span> {
+ 93                 <span class="ST2">logger</span>.warn(<span class="string">&quot;</span><span class="string">File {} does not exist or is not readable</span><span class="string">&quot;</span>, blockedName);
+ 94             }
+ 95         }
+ 96         <span class="literal">return</span> <span class="literal">this</span>;
+ 97     }
+ 98 
+ 99     <span class="comment">/**</span>
+100 <span class="comment">     * </span><span class="ST0">Додає</span> <span class="ST0">домен</span> <span class="ST0">до</span> <span class="ST0">переліку</span><span class="ST0">.</span>
+101 <span class="comment">     *</span>
+102 <span class="comment">     * </span><span class="ST0">@param</span> bdn <span class="comment">об</span><span class="comment">&#39;</span><span class="comment">єкт</span> <span class="comment">BlockedDomain</span>
+103 <span class="comment">     * </span><span class="ST0">@return</span> <span class="comment">true</span><span class="comment">, </span><span class="comment">якщо</span> <span class="comment">домен</span> <span class="comment">додано</span> <span class="comment">успішно</span>
+104      <span class="comment">*/</span>
+105     <span class="literal">public</span> <span class="literal">boolean</span> <span class="ST1">addBlockedDomainName</span>(BlockedDomain bdn) {
+106         <span class="literal">return</span> <span class="literal">this</span>.<span class="ST4">blockedDomains</span>.add(bdn);
+107     }
+108 
+109     <span class="comment">/**</span>
+110 <span class="comment">     * </span><span class="ST0">Зберігає</span> <span class="ST0">перелік</span> <span class="ST0">доменів</span> <span class="ST0">у</span> <span class="ST0">вихідний</span> <span class="ST0">файл</span><span class="ST0">, </span><span class="ST0">указаний</span> <span class="ST0">у</span> <span class="ST0">blocked_result</span><span class="ST0">.</span>
+111 <span class="comment">     * </span><span class="comment">Включає</span> <span class="comment">лише</span> <span class="comment">домени</span> <span class="comment">зі</span> <span class="comment">статусом</span> <span class="comment">isBlocked</span><span class="comment"> = </span><span class="comment">true</span><span class="comment">.</span>
+112 <span class="comment">     *</span>
+113 <span class="comment">     * </span><span class="ST0">@return</span> <span class="comment">цей</span> <span class="comment">об</span><span class="comment">&#39;</span><span class="comment">єкт</span> <span class="comment">для</span> <span class="comment">ланцюгових</span> <span class="comment">викликів</span>
+114 <span class="comment">     * </span><span class="ST0">@throws</span> <span class="comment">IOException</span> <span class="comment">у</span> <span class="comment">разі</span> <span class="comment">помилок</span> <span class="comment">запису</span>
+115      <span class="comment">*/</span>
+116     <span class="literal">public</span> BlockedObjects <span class="ST1">storeState</span>() <span class="literal">throws</span> IOException {
+117         TreeSet&lt;String&gt; blockedDomainsResultList = <span class="literal">new</span> TreeSet&lt;&gt;();
+118         <span class="literal">for</span> (BlockedDomain bd : <span class="literal">this</span>.<span class="ST4">blockedDomains</span>) {
+119             <span class="literal">if</span> (bd.getIsBlocked()) {
+120                 blockedDomainsResultList.add(bd.getDomainName());
+121             } <span class="literal">else</span> {
+122                 blockedDomainsResultList.remove(bd.getDomainName());
+123             }
+124         }
+125 
+126         <span class="literal">try</span> (PrintWriter pw = <span class="literal">new</span> PrintWriter(
+127                 <span class="literal">new</span> OutputStreamWriter(
+128                         <span class="literal">new</span> FileOutputStream(<span class="literal">t</span><span class="literal">his</span>.<span class="ST4">blockedResultName</span>.trim()),
+129                         <span class="string">&quot;</span><span class="string">UTF-8</span><span class="string">&quot;</span>))) {
+130             <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Writing blocked domains to {}</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">blockedResultName</span>);
+131             <span class="literal">for</span> (String s : blockedDomainsResultList) {
+132                 pw.println(s);
+133             }
+134             pw.flush();
+135         }
+136         <span class="ST2">logger</span>.info(<span class="string">&quot;</span><span class="string">Successfully stored blocked domains to {}</span><span class="string">&quot;</span>, <span class="literal">t</span><span class="literal">his</span>.<span class="ST4">blockedResultName</span>);
+137         <span class="literal">return</span> <span class="literal">this</span>;
+138     }
+139 }
+140 
+</pre></body>
+</html>

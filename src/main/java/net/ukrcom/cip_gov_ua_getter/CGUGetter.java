@@ -23,6 +23,8 @@ public class CGUGetter {
     protected String jsonBodyArticles;
     private final String userAgent;
     private final String secChUa;
+    private final Properties prop;
+    private final boolean debug;
 
     /**
      * Конструктор класа. Підключаємося до API і зчитуємо отримані дані,
@@ -31,6 +33,10 @@ public class CGUGetter {
      * @param p - об'єкт властивостей.
      */
     public CGUGetter(Properties p) {
+
+        this.prop = p;
+        this.debug = this.prop.getProperty("debug", "false").equalsIgnoreCase("true");
+
         this.urlArticles = p.getProperty(
                 "urlArticles",
                 "https://cip.gov.ua/services/cm/api/articles?page=0&size=1000&tagId=60751"
@@ -58,6 +64,32 @@ public class CGUGetter {
                     )));
 
             Page page = context.newPage();
+
+            // Блокуємо запити до Google Analytics і Google Tag Manager
+            page.route("**/*google-analytics.com/**", route -> {
+                String url = route.request().url();
+                logger.debug("Blocked Google Analytics request: {}", url);
+                route.abort();
+            });
+            page.route("**/*googletagmanager.com/**", route -> {
+                String url = route.request().url();
+                logger.debug("Blocked Google Tag Manager request: {}", url);
+                route.abort();
+            });
+
+            // Блокуємо статичні ресурси (зображення, шрифти, стилі)
+            page.route("**/*.{jpg,jpeg,png,svg,woff,woff2,ttf,css,gif,ico}", route -> {
+                String url = route.request().url();
+                logger.debug("Blocked static resource: {}", url);
+                route.abort();
+            });
+
+            // Логування запитів і відповідей у дебаг-режимі
+            if (this.debug) {
+                page.onRequest(request -> logger.debug("Playwright request: {} {}", request.method(), request.url()));
+                page.onResponse(response -> logger.debug("Playwright response: {} {} {}",
+                        response.status(), response.request().method(), response.url()));
+            }
 
             Response response = page.waitForResponse(
                     r -> r.url().contains("articles"),

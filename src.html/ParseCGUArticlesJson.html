@@ -1,0 +1,66 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>ParseCGUArticlesJson.java</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<style type="text/css">
+<!--
+body {color: #000000; background-color: #ffffff; font-family: monospace}
+pre {color: #000000; background-color: #ffffff; font-family: monospace}
+table {color: #000000; background-color: #e9e8e2; font-family: monospace}
+.ST0 {color: #969696; font-family: monospace; font-weight: bold}
+.ST1 {font-family: monospace; font-weight: bold}
+.comment {color: #969696}
+.ST2 {color: #009900}
+.literal {color: #0000e6}
+.string {color: #ce7b00}
+-->
+</style>
+</head>
+<body>
+<table width="100%"><tr><td align="center">/home/olden/NetBeansProjects/cip_gov_ua_getter/src/main/java/net/ukrcom/cip_gov_ua_getter/ParseCGUArticlesJson.java</td></tr></table>
+<pre>
+ 1 <span class="comment">/*</span>
+ 2 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt</span><span class="comment"> to change this license</span>
+ 3 <span class="comment"> * Click </span><span class="comment">nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java</span><span class="comment"> to edit this template</span>
+ 4 <span class="comment"> */</span>
+ 5 <span class="literal">package</span> net.ukrcom.cip_gov_ua_getter;
+ 6 
+ 7 <span class="literal">import</span> org.json.JSONArray;
+ 8 <span class="literal">import</span> org.json.JSONException;
+ 9 <span class="literal">import</span> org.json.JSONObject;
+10 
+11 <span class="comment">/**</span>
+12 <span class="comment"> * </span><span class="ST0">Клас</span><span class="ST0">, </span><span class="ST0">що</span> <span class="ST0">розбирає</span> <span class="ST0">JSON</span> <span class="ST0">з</span> <span class="ST0">переліком</span> <span class="ST0">розпоряджень</span><span class="ST0">.</span>
+13 <span class="comment"> *</span>
+14 <span class="comment"> * </span><span class="ST0">@author</span> <span class="comment">olden</span>
+15  <span class="comment">*/</span>
+16 <span class="literal">public</span> <span class="literal">class</span> <span class="ST1">ParseCGUArticlesJson</span> {
+17 
+18     <span class="literal">protected</span> <span class="literal">final</span> JSONObject <span class="ST2">json</span>;
+19     <span class="literal">protected</span> <span class="literal">final</span> JSONArray <span class="ST2">posts</span>;
+20 
+21     <span class="comment">/**</span>
+22 <span class="comment">     * </span><span class="ST0">Конструктор</span> <span class="ST0">класа</span><span class="ST0">.</span> <span class="comment">Розбираємо</span> <span class="comment">сформований</span> <span class="comment">JSON</span> <span class="comment">з</span> <span class="comment">розпорядженнями</span><span class="comment">.</span>
+23 <span class="comment">     *</span>
+24 <span class="comment">     * </span><span class="ST0">@param</span> json_data
+25 <span class="comment">     * </span><span class="ST0">@throws</span> <span class="comment">JSONException</span>
+26      <span class="comment">*/</span>
+27     <span class="literal">public</span> <span class="ST1">ParseCGUArticlesJson</span>(String json_data) <span class="literal">throws</span> JSONException {
+28         <span class="literal">this</span>.<span class="ST2">json</span> = <span class="literal">new</span> JSONObject(json_data);
+29         <span class="literal">this</span>.<span class="ST2">posts</span> = <span class="ST2">json</span>.getJSONArray(<span class="string">&quot;</span><span class="string">posts</span><span class="string">&quot;</span>);
+30     }
+31 
+32     <span class="comment">/**</span>
+33 <span class="comment">     * </span><span class="ST0">Повертаємо</span> <span class="ST0">масив</span> <span class="ST0">з</span> <span class="ST0">розібраними</span> <span class="ST0">й</span> <span class="ST0">відокремленими</span> <span class="ST0">один</span> <span class="ST0">від</span> <span class="ST0">одного</span>
+34 <span class="comment">     * </span><span class="ST0">розпорядженнями</span><span class="ST0">, </span><span class="ST0">для</span> <span class="ST0">подальшого</span> <span class="ST0">аналізу</span><span class="ST0">.</span>
+35 <span class="comment">     *</span>
+36 <span class="comment">     * </span><span class="ST0">@return</span><span class="comment"> @</span><span class="comment">throws</span> <span class="comment">JSONException</span>
+37      <span class="comment">*/</span>
+38     <span class="literal">public</span> JSONArray <span class="ST1">getPosts</span>() <span class="literal">throws</span> JSONException {
+39         <span class="literal">return</span> <span class="literal">this</span>.<span class="ST2">posts</span>;
+40     }
+41 }
+42 
+</pre></body>
+</html>
