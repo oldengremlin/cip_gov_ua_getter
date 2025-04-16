@@ -232,6 +232,47 @@ public class AggressorServicesParser {
                 domain = domain.substring(0, endIndex);
             }
 
+            if (domain.isBlank() || domain.length() > 255) {
+                logger.warn("Skipping domain due to invalid length: {}", domain);
+                return;
+            }
+
+            String idnDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
+            if (DOMAIN_VALIDATOR.isValid(idnDomain)) {
+                String tld = extractTld(idnDomain);
+                if (tld == null || !DOMAIN_VALIDATOR.isValidTld(tld)) {
+                    logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
+                    return;
+                }
+                logger.info("Valid IDN domain: {}", domain);
+            } else if (IP_VALIDATOR.isValid(domain)) {
+                logger.warn("Skipping IP address: {}", domain);
+                return;
+            } else {
+                logger.warn("Invalid IDN domain: {}", domain);
+                return;
+            }
+
+            boolean hasNonLatin = domain.chars().anyMatch(c -> c > 127);
+            if (hasNonLatin) {
+                String latinized = SKELETON_CACHE.computeIfAbsent(domain, SPOOF_CHECKER::getSkeleton);
+                String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED).toLowerCase();
+                if (DOMAIN_VALIDATOR.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
+                    String latinizedTld = extractTld(latinizedIdn);
+                    if (latinizedTld == null || !DOMAIN_VALIDATOR.isValidTld(latinizedTld)) {
+                        logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
+                        return;
+                    }
+                    BlockedDomain bd = new BlockedDomain(latinizedIdn, true, LocalDateTime.now());
+                    domains.add(bd);
+                    logger.info("Valid latinized domain: {} (from {} ⮕ {})", latinizedIdn, domain, latinized);
+                } else {
+                    logger.debug("Latinized domain invalid or identical: {} (from {} ⮕ {})", latinized, domain, latinized);
+                }
+            }
+
+////////////////////////////////////////////////////////////////////////////////
+            /*
             if (IP_VALIDATOR.isValid(domain)) {
                 if (debug) {
                     logger.debug("Skipping IP address: {}", domain);
@@ -248,8 +289,7 @@ public class AggressorServicesParser {
                 }
             }
 
-            if (DOMAIN_VALIDATOR.isValid(asciiDomain) && asciiDomain.length() <= 253
-                    && !asciiDomain.equals(sourceDomain)) {
+            if (DOMAIN_VALIDATOR.isValid(asciiDomain) && !asciiDomain.equals(sourceDomain)) {
                 BlockedDomain bd = new BlockedDomain(asciiDomain, true, LocalDateTime.now());
                 logger.info("Extract domain: {} ⮕ {} ⮕ {}", urlOrDomain, domain, asciiDomain);
                 domains.add(bd);
@@ -268,6 +308,7 @@ public class AggressorServicesParser {
                     logger.debug("Added homograph domain: {} (original: {})", latinDomain, domain);
                 }
             }
+             */
         } catch (Exception e) {
             if (debug) {
                 logger.debug("Error processing domain {}: {}", urlOrDomain, e.getMessage());
@@ -275,11 +316,24 @@ public class AggressorServicesParser {
         }
     }
 
+    private String extractTld(String domain) {
+        if (domain == null || domain.isEmpty()) {
+            return null;
+        }
+        int lastDot = domain.lastIndexOf('.');
+        if (lastDot == -1 || lastDot == domain.length() - 1) {
+            return null;
+        }
+        return domain.substring(lastDot);
+    }
+
     private String checkHomographs(String domain) {
         String normalized = domain.toLowerCase();
+        logger.debug("Check Homographs: {} ⮕ {}", domain, normalized);
         try {
             boolean hasNonLatin = normalized.chars().anyMatch(c -> c > 127);
             if (!hasNonLatin) {
+                logger.debug("Is Latin: {}", normalized);
                 return normalized;
             }
 
