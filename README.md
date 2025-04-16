@@ -162,7 +162,7 @@ Apache License 2.0. Див. [LICENSE](LICENSE) та [NOTICE](NOTICE).
 
 ## Контакти
 
-Питання, баги, ідеї? Відкривайте issue в репозиторії.
+Питання, баги, ідеї? Відкривайте [issues](https://github.com/oldengremlin/cip_gov_ua_getter/issues) в репозиторії.
 
 ---
 
