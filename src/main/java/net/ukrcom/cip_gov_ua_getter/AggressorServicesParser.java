@@ -206,7 +206,11 @@ public class AggressorServicesParser {
 
     private void extractAndAddDomains(String urlOrDomain, Set<BlockedDomain> domains) {
         try {
-            String domain = urlOrDomain.replaceFirst("https?://", "");
+            String domain = urlOrDomain
+                    .trim()
+                    .replaceAll("(?i)^(https?://|ftp://)", "")
+                    .replaceAll("\\s+", "")
+                    .toLowerCase();
 
             for (String service : serviceSubdomains) {
                 if (domain.startsWith(service + ".")) {
@@ -235,7 +239,7 @@ public class AggressorServicesParser {
                 return;
             }
 
-            String asciiDomain = domain.toLowerCase();
+            String asciiDomain = domain;
             try {
                 asciiDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
             } catch (Exception e) {
@@ -257,7 +261,7 @@ public class AggressorServicesParser {
             String latinDomain = checkHomographs(domain);
             if (!latinDomain.equals(domain) && DOMAIN_VALIDATOR.isValid(latinDomain)
                     && latinDomain.length() <= 253 && !latinDomain.equals(sourceDomain)) {
-                BlockedDomain bd = new BlockedDomain(latinDomain.toLowerCase(), true, "");
+                BlockedDomain bd = new BlockedDomain(latinDomain.toLowerCase(), true, LocalDateTime.now());
                 logger.info("Extract domain: {} ⮕ {} ⮕ …homographs… ⮕ {} ⮕ …latin… ⮕ {}", urlOrDomain, domain, asciiDomain, latinDomain);
                 domains.add(bd);
                 if (debug) {
