@@ -244,6 +244,8 @@ public class AggressorServicesParser {
                     logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
                     return;
                 }
+                BlockedDomain bd = new BlockedDomain(domain, true, LocalDateTime.now());
+                domains.add(bd);
                 logger.info("Valid IDN domain: {}", domain);
             } else if (IP_VALIDATOR.isValid(domain)) {
                 logger.warn("Skipping IP address: {}", domain);
@@ -270,45 +272,6 @@ public class AggressorServicesParser {
                     logger.debug("Latinized domain invalid or identical: {} (from {} ⮕ {})", latinized, domain, latinized);
                 }
             }
-
-////////////////////////////////////////////////////////////////////////////////
-            /*
-            if (IP_VALIDATOR.isValid(domain)) {
-                if (debug) {
-                    logger.debug("Skipping IP address: {}", domain);
-                }
-                return;
-            }
-
-            String asciiDomain = domain;
-            try {
-                asciiDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
-            } catch (Exception e) {
-                if (debug) {
-                    logger.debug("Invalid domain for IDN conversion: {}", domain);
-                }
-            }
-
-            if (DOMAIN_VALIDATOR.isValid(asciiDomain) && !asciiDomain.equals(sourceDomain)) {
-                BlockedDomain bd = new BlockedDomain(asciiDomain, true, LocalDateTime.now());
-                logger.info("Extract domain: {} ⮕ {} ⮕ {}", urlOrDomain, domain, asciiDomain);
-                domains.add(bd);
-                if (debug && !domain.equals(asciiDomain)) {
-                    logger.debug("Added ASCII domain: {} (original: {})", asciiDomain, domain);
-                }
-            }
-
-            String latinDomain = checkHomographs(domain);
-            if (!latinDomain.equals(domain) && DOMAIN_VALIDATOR.isValid(latinDomain)
-                    && latinDomain.length() <= 253 && !latinDomain.equals(sourceDomain)) {
-                BlockedDomain bd = new BlockedDomain(latinDomain.toLowerCase(), true, LocalDateTime.now());
-                logger.info("Extract domain: {} ⮕ {} ⮕ …homographs… ⮕ {} ⮕ …latin… ⮕ {}", urlOrDomain, domain, asciiDomain, latinDomain);
-                domains.add(bd);
-                if (debug) {
-                    logger.debug("Added homograph domain: {} (original: {})", latinDomain, domain);
-                }
-            }
-             */
         } catch (Exception e) {
             if (debug) {
                 logger.debug("Error processing domain {}: {}", urlOrDomain, e.getMessage());
@@ -327,36 +290,4 @@ public class AggressorServicesParser {
         return domain.substring(lastDot);
     }
 
-    private String checkHomographs(String domain) {
-        String normalized = domain.toLowerCase();
-        logger.debug("Check Homographs: {} ⮕ {}", domain, normalized);
-        try {
-            boolean hasNonLatin = normalized.chars().anyMatch(c -> c > 127);
-            if (!hasNonLatin) {
-                logger.debug("Is Latin: {}", normalized);
-                return normalized;
-            }
-
-            String idnDomain = IDN.toASCII(normalized, IDN.ALLOW_UNASSIGNED);
-
-            String latinized = SKELETON_CACHE.computeIfAbsent(normalized, key -> {
-                String nfkc = Normalizer.normalize(key, Normalizer.Form.NFKC);
-                return nfkc.toLowerCase();
-            });
-
-            String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED);
-
-            if (!latinizedIdn.equals(idnDomain)) {
-                if (debug) {
-                    logger.debug("Detected homograph: {} -> {}", normalized, latinizedIdn);
-                }
-                return latinizedIdn;
-            }
-        } catch (Exception e) {
-            if (debug) {
-                logger.debug("Homograph check failed for {}: {}", normalized, e.getMessage());
-            }
-        }
-        return normalized;
-    }
 }
