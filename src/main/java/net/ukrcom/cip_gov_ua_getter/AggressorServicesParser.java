@@ -39,6 +39,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.text.Normalizer;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Set;
@@ -245,7 +246,7 @@ public class AggressorServicesParser {
 
             if (DOMAIN_VALIDATOR.isValid(asciiDomain) && asciiDomain.length() <= 253
                     && !asciiDomain.equals(sourceDomain)) {
-                BlockedDomain bd = new BlockedDomain(asciiDomain, true, "");
+                BlockedDomain bd = new BlockedDomain(asciiDomain, true, LocalDateTime.now());
                 domains.add(bd);
                 if (debug && !domain.equals(asciiDomain)) {
                     logger.debug("Added ASCII domain: {} (original: {})", asciiDomain, domain);
