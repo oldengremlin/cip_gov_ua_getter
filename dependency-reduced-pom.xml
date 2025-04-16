@@ -24,6 +24,14 @@
             </goals>
             <configuration>
               <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-all.jar</outputFile>
+              <transformers>
+                <transformer>
+                  <mainClass>net.ukrcom.cip_gov_ua_getter.Cip_gov_ua_getter</mainClass>
+                  <manifestEntries>
+                    <Implementation-Version>${project.version}</Implementation-Version>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
             </configuration>
           </execution>
         </executions>
@@ -31,8 +39,7 @@
     </plugins>
   </build>
   <properties>
-    <maven.compiler.target>16</maven.compiler.target>
-    <maven.compiler.source>16</maven.compiler.source>
+    <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 </project>
