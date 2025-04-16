@@ -68,6 +68,8 @@ public class Cip_gov_ua_getter {
                 throw new RuntimeException("Failed to load config", e);
             }
 
+            prop.setProperty("debug", debug ? "true" : "false");
+
             BlockedObjects bo = new BlockedObjects(prop).getBlockedDomainNames();
 
             CGUGetter cguGetter = new CGUGetter(prop);

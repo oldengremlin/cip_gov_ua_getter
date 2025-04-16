@@ -40,6 +40,7 @@ public class GetPrescript {
     private final String secChUa;
     private final Properties prop;
     private final String mimeType;
+    private final boolean debug;
 
     // Спільний JavaScript-код для AJAX-запиту
     private static final String FETCH_SCRIPT_TEMPLATE = """
@@ -73,6 +74,7 @@ public class GetPrescript {
     public GetPrescript(Properties p, String i, String mt) throws IOException {
         this.localRead = true;
         this.prop = p;
+        this.debug = this.prop.getProperty("debug", "false").equalsIgnoreCase("true");
         this.id = i;
         this.mimeType = mt;
         this.urlPrescript = this.prop.getProperty(
@@ -134,6 +136,32 @@ public class GetPrescript {
                         "Sec-Fetch-Mode", "cors",
                         "Sec-Fetch-Site", "same-origin"
                 ))); Page page = context.newPage()) {
+
+            // Блокуємо запити до Google Analytics і Google Tag Manager
+            page.route("**/*google-analytics.com/**", route -> {
+                String url = route.request().url();
+                logger.debug("Blocked Google Analytics request: {}", url);
+                route.abort();
+            });
+            page.route("**/*googletagmanager.com/**", route -> {
+                String url = route.request().url();
+                logger.debug("Blocked Google Tag Manager request: {}", url);
+                route.abort();
+            });
+
+            // Блокуємо статичні ресурси (зображення, шрифти, стилі)
+            page.route("**/*.{jpg,jpeg,png,svg,woff,woff2,ttf,css,gif,ico}", route -> {
+                String url = route.request().url();
+                logger.debug("Blocked static resource: {}", url);
+                route.abort();
+            });
+
+            // Логування запитів і відповідей у дебаг-режимі
+            if (this.debug) {
+                page.onRequest(request -> logger.debug("Playwright request: {} {}", request.method(), request.url()));
+                page.onResponse(response -> logger.debug("Playwright response: {} {} {}",
+                        response.status(), response.request().method(), response.url()));
+            }
 
             // Витягуємо базовий URL із urlPrescript
             String baseUrl;
