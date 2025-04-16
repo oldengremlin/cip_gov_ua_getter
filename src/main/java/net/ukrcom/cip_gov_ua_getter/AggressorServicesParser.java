@@ -227,8 +227,6 @@ public class AggressorServicesParser {
                 domain = domain.substring(0, endIndex);
             }
 
-            logger.info("urlOrDomain {} ⮕ {}", urlOrDomain, domain);
-
             if (IP_VALIDATOR.isValid(domain)) {
                 if (debug) {
                     logger.debug("Skipping IP address: {}", domain);
@@ -244,6 +242,8 @@ public class AggressorServicesParser {
                     logger.debug("Invalid domain for IDN conversion: {}", domain);
                 }
             }
+
+            logger.info("Extract domain: {} ⮕ {} ⮕ {}", urlOrDomain, domain, asciiDomain);
 
             if (DOMAIN_VALIDATOR.isValid(asciiDomain) && asciiDomain.length() <= 253
                     && !asciiDomain.equals(sourceDomain)) {
