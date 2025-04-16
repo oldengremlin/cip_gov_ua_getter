@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ch.qos.logback.classic.Level;
 import java.io.File;
+import java.util.Set;
 
 /**
  * Консольна утиліта для збору та обробки розпоряджень про блокування доменів.
@@ -151,6 +152,13 @@ public class Cip_gov_ua_getter {
                         }
                     }
                 }
+            }
+
+            // Parse aggressor services
+            AggressorServicesParser parser = new AggressorServicesParser(prop, debug);
+            Set<BlockedDomain> aggressorDomains = parser.parse();
+            for (BlockedDomain bd : aggressorDomains) {
+                bo.addBlockedDomainName(bd);
             }
 
             // Зберігаємо результати

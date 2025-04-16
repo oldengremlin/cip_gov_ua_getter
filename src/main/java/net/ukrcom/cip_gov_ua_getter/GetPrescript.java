@@ -33,6 +33,7 @@ import com.ibm.icu.text.SpoofChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Arrays;
 
 /**
  * Клас зчитує перелік доменів з відповідних text/plain файлів у розпорядженнях.
@@ -53,6 +54,7 @@ public class GetPrescript {
     private final Properties prop;
     private final String mimeType;
     private final boolean debug;
+    private final String[] serviceSubdomains;
 
     // Спільний JavaScript-код для AJAX-запиту
     private static final String FETCH_SCRIPT_TEMPLATE = """
@@ -108,6 +110,22 @@ public class GetPrescript {
                 "secChUa",
                 "\"Chromium\";v=\"129\", \"Not:A-Brand\";v=\"24\", \"Google Chrome\";v=\"129\""
         ).trim();
+        String subdomains = p.getProperty("SERVICE_SUBDOMAINS",
+                "www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test,m");
+        this.serviceSubdomains = Arrays.stream(subdomains.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .filter(s -> {
+                    boolean valid = s.matches("[a-zA-Z0-9-]+");
+                    if (!valid && debug) {
+                        logger.debug("Invalid subdomain skipped: {}", s);
+                    }
+                    return valid;
+                })
+                .toArray(String[]::new);
+        if (serviceSubdomains.length == 0) {
+            logger.warn("No valid service subdomains defined in SERVICE_SUBDOMAINS");
+        }
     }
 
     public GetPrescript getPrescriptFrom() {
@@ -270,10 +288,19 @@ public class GetPrescript {
         for (String s : this.bodyPrescript.split("\n")) {
             String cleaned = s.trim()
                     .replaceAll("(?i)^(https?://|ftp://)", "")
-                    .replaceAll("(?i)^(www\\.|ftp\\.|m\\.)", "")
-                    .replaceAll("/.*$", "")
                     .replaceAll("\\s+", "")
                     .toLowerCase();
+
+            // Видаляємо субдомени
+            for (String service : serviceSubdomains) {
+                if (cleaned.startsWith(service + ".")) {
+                    cleaned = cleaned.substring(service.length() + 1);
+                    break;
+                }
+            }
+
+            cleaned = cleaned
+                    .replaceAll("/.*$", "");
 
             if (cleaned.isBlank() || cleaned.length() > 255) {
                 logger.warn("Skipping domain due to invalid length: {}", cleaned);

@@ -1,7 +1,9 @@
 net/ukrcom/cip_gov_ua_getter/Cip_gov_ua_getter.class
 net/ukrcom/cip_gov_ua_getter/BlockedDomain.class
 net/ukrcom/cip_gov_ua_getter/ParseCGUArticlesJson.class
+net/ukrcom/cip_gov_ua_getter/AggressorServicesParser.class
 net/ukrcom/cip_gov_ua_getter/CGUGetter.class
 net/ukrcom/cip_gov_ua_getter/BlockedDomainComparator.class
 net/ukrcom/cip_gov_ua_getter/GetPrescript.class
+net/ukrcom/cip_gov_ua_getter/AggressorServicesParser$1.class
 net/ukrcom/cip_gov_ua_getter/BlockedObjects.class
