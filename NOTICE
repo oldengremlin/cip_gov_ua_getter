@@ -4,3 +4,6 @@ Copyright 2025 olden
 This product includes software developed by:
 - The Apache Software Foundation (http://www.apache.org/) for commons-validator.
 - Microsoft for Playwright (https://github.com/microsoft/playwright).
+- Unicode, Inc. for ICU4J (https://unicode-org.github.io/icu/).
+- QOS.ch for Logback (https://logback.qos.ch/).
+- JSON.org for JSON library (https://github.com/stleary/JSON-java).

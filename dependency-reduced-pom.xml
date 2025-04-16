@@ -4,6 +4,13 @@
   <groupId>net.ukr-com</groupId>
   <artifactId>cip_gov_ua_getter</artifactId>
   <version>2.4</version>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
   <build>
     <resources>
       <resource>

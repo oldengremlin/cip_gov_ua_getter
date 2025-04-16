@@ -84,11 +84,13 @@
      ```bash
      java -jar target/cip_gov_ua_getter-2.4-all.jar
      ```
+
    - Дебаг-режим:
 
      ```bash
      java -jar target/cip_gov_ua_getter-2.4-all.jar -d
      ```
+
    - Вказати свій конфіг:
 
      ```bash
@@ -110,6 +112,7 @@
   test.org
   xn--80ak6aa92e.com
   ```
+
 - Лог із `-d`:
 
   ```
@@ -122,11 +125,11 @@
 
 - **Залежності**:
 
-  - Playwright 1.51.0 — для роботи з API.
-  - commons-validator 1.9.0 — для перевірки доменів.
-  - icu4j 77.1 — для обробки гомогліфів.
-  - logback-classic 1.5.18 — для логування.
-  - json 20250107 — для парсингу JSON.
+  - Playwright 1.51.0 (Apache License 2.0)
+  - commons-validator 1.9.0 (Apache License 2.0)
+  - icu4j 77.1 (Unicode License)
+  - logback-classic 1.5.18 (EPL 1.0/LGPL 2.1)
+  - json 20250107 (JSON License)
 
 - **Логіка роботи**:
 
@@ -154,11 +157,11 @@
 
 ## Ліцензія
 
-Apache License 2.0. Див. [LICENSE](LICENSE) та [NOTICE](NOTICE).
+Apache License 2.0. Див. LICENSE та NOTICE.
 
 ## Контакти
 
-Питання, баги, ідеї? Пишіть на \[your.email@example.com\] або відкривайте issue в репозиторії.
+Питання, баги, ідеї? Відкривайте issue в репозиторії.
 
 ---
 
