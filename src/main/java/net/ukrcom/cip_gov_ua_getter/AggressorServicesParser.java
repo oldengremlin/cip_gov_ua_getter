@@ -227,6 +227,8 @@ public class AggressorServicesParser {
                 domain = domain.substring(0, endIndex);
             }
 
+            logger.info("urlOrDomain {} ⮕ {}", urlOrDomain, domain);
+
             if (IP_VALIDATOR.isValid(domain)) {
                 if (debug) {
                     logger.debug("Skipping IP address: {}", domain);
