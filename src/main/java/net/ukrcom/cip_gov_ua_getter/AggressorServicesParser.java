@@ -243,8 +243,6 @@ public class AggressorServicesParser {
                 }
             }
 
-            logger.info("Extract domain: {} ⮕ {} ⮕ {}", urlOrDomain, domain, asciiDomain);
-
             if (DOMAIN_VALIDATOR.isValid(asciiDomain) && asciiDomain.length() <= 253
                     && !asciiDomain.equals(sourceDomain)) {
                 BlockedDomain bd = new BlockedDomain(asciiDomain, true, "");
@@ -253,6 +251,8 @@ public class AggressorServicesParser {
                     logger.debug("Added ASCII domain: {} (original: {})", asciiDomain, domain);
                 }
             }
+
+            logger.info("Extract domain: {} ⮕ {} ⮕ {}", urlOrDomain, domain, asciiDomain);
 
             String latinDomain = checkHomographs(domain);
             if (!latinDomain.equals(domain) && DOMAIN_VALIDATOR.isValid(latinDomain)
