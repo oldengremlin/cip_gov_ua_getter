@@ -247,18 +247,18 @@ public class AggressorServicesParser {
             if (DOMAIN_VALIDATOR.isValid(asciiDomain) && asciiDomain.length() <= 253
                     && !asciiDomain.equals(sourceDomain)) {
                 BlockedDomain bd = new BlockedDomain(asciiDomain, true, LocalDateTime.now());
+                logger.info("Extract domain: {} ⮕ {} ⮕ {}", urlOrDomain, domain, asciiDomain);
                 domains.add(bd);
                 if (debug && !domain.equals(asciiDomain)) {
                     logger.debug("Added ASCII domain: {} (original: {})", asciiDomain, domain);
                 }
             }
 
-            logger.info("Extract domain: {} ⮕ {} ⮕ {}", urlOrDomain, domain, asciiDomain);
-
             String latinDomain = checkHomographs(domain);
             if (!latinDomain.equals(domain) && DOMAIN_VALIDATOR.isValid(latinDomain)
                     && latinDomain.length() <= 253 && !latinDomain.equals(sourceDomain)) {
                 BlockedDomain bd = new BlockedDomain(latinDomain.toLowerCase(), true, "");
+                logger.info("Extract domain: {} ⮕ {} ⮕ …homographs… ⮕ {} ⮕ …latin… ⮕ {}", urlOrDomain, domain, asciiDomain, latinDomain);
                 domains.add(bd);
                 if (debug) {
                     logger.debug("Added homograph domain: {} (original: {})", latinDomain, domain);
