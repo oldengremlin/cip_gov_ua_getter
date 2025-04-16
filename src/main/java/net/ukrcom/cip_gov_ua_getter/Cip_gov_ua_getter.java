@@ -6,7 +6,12 @@ package net.ukrcom.cip_gov_ua_getter;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -15,11 +20,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ch.qos.logback.classic.Level;
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.attribute.FileTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 
 /**
  * Консольна утиліта для збору та обробки розпоряджень про блокування доменів.
@@ -29,7 +29,7 @@ import java.time.format.DateTimeParseException;
 public class Cip_gov_ua_getter {
 
     private static final Logger logger = LoggerFactory.getLogger(Cip_gov_ua_getter.class);
-    private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
 
     /**
      * Основний процес.
@@ -153,10 +153,12 @@ public class Cip_gov_ua_getter {
     }
 
     /**
-     * Встановлює дату модифікації файлу на основі дати з поста.
+     * Встановлює дату модифікації файлу на основі дати з поста. Нічого не
+     * робить, якщо файл недоступний або дата некоректна.
      *
      * @param file файл для оновлення
-     * @param dateStr дата у форматі ISO 8601 (наприклад, "2025-04-15T08:40:04")
+     * @param dateStr дата у форматі ISO 8601 (наприклад,
+     * "2023-12-07T10:44:00Z")
      */
     private static void setFileDate(File file, String dateStr) {
         if (!file.exists() || !file.canWrite()) {
