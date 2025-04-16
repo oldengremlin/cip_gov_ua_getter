@@ -65,7 +65,7 @@ public class AggressorServicesParser {
     public AggressorServicesParser(Properties properties, boolean debug) {
         this.properties = properties;
         this.debug = debug;
-        this.manualDir = properties.getProperty("AggressorServices_prescript_to", "./PRESCRIPT") + "/MANUAL/";
+        this.manualDir = properties.getProperty("AggressorServices_prescript_to", "./PRESCRIPT");
         this.sourceDomain = properties.getProperty("AggressorServices_SOURCE_DOMAIN", "webportal.nrada.gov.ua");
         this.primaryPdfName = properties.getProperty("AggressorServices_PRIMARY_PDF_NAME", "Perelik.#450.2023.07.06.pdf");
         String subdomains = properties.getProperty("SERVICE_SUBDOMAINS",
