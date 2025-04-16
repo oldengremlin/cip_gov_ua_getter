@@ -157,7 +157,8 @@
 
 ## Ліцензія
 
-Apache License 2.0. Див. LICENSE та NOTICE.
+Apache License 2.0. Див. [LICENSE](LICENSE) та [NOTICE](NOTICE).
+Пояснення українською: [LICENSE-UKR.md](LICENSE-UKR.md).
 
 ## Контакти
 
