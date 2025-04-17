@@ -34,6 +34,9 @@ public class BlockedDomain {
      * @param dt - дата в форматі LocalDateTime
      */
     public BlockedDomain(String dn, boolean b, LocalDateTime dt) {
+        if (dn == null || dn.isBlank() || dn.length() > 255) {
+            throw new IllegalArgumentException("Domain name is invalid or exceeds 255 characters: " + dn);
+        }
         this.domainName = dn;
         this.isBlocked = b;
         this.dateTime = dt;
@@ -47,6 +50,9 @@ public class BlockedDomain {
      * @param s - дата в текстовому форматі. Береться з атрибута date.
      */
     public BlockedDomain(String dn, boolean b, String s) {
+        if (dn == null || dn.isBlank() || dn.length() > 255) {
+            throw new IllegalArgumentException("Domain name is invalid or exceeds 255 characters: " + dn);
+        }
         this.domainName = dn;
         this.isBlocked = b;
         /*
@@ -63,6 +69,9 @@ public class BlockedDomain {
      * @param dn - ім'я домена
      */
     public BlockedDomain(String dn) {
+        if (dn == null || dn.isBlank() || dn.length() > 255) {
+            throw new IllegalArgumentException("Domain name is invalid or exceeds 255 characters: " + dn);
+        }
         this.domainName = dn;
         this.isBlocked = true;
         this.dateTime = Instant

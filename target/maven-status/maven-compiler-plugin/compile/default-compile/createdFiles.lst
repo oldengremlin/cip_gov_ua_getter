@@ -1,4 +1,5 @@
 net/ukrcom/cip_gov_ua_getter/Cip_gov_ua_getter.class
+net/ukrcom/cip_gov_ua_getter/DomainValidatorUtil.class
 net/ukrcom/cip_gov_ua_getter/BlockedDomain.class
 net/ukrcom/cip_gov_ua_getter/ParseCGUArticlesJson.class
 net/ukrcom/cip_gov_ua_getter/AggressorServicesParser.class

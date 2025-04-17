@@ -15,25 +15,28 @@
  */
 package net.ukrcom.cip_gov_ua_getter;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.FileWriter;
-import java.nio.file.Files;
-import java.nio.charset.StandardCharsets;
+import com.ibm.icu.text.SpoofChecker;
+import com.microsoft.playwright.*;
 import org.apache.commons.validator.routines.DomainValidator;
 import org.apache.commons.validator.routines.InetAddressValidator;
-import java.net.IDN;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.Properties;
-import com.microsoft.playwright.*;
-import java.util.Map;
-import com.ibm.icu.text.SpoofChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.concurrent.ConcurrentHashMap;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 /**
  * Клас зчитує перелік доменів з відповідних text/plain файлів у розпорядженнях.
@@ -47,7 +50,7 @@ public class GetPrescript {
     protected final String urlPrescript;
     protected String bodyPrescript;
     protected String id;
-    protected String storePrescriptTo;
+    protected final Path storePrescriptTo;
     protected String origFileName;
     private final String userAgent;
     private final String secChUa;
@@ -75,7 +78,6 @@ public class GetPrescript {
 
     // SpoofChecker для обробки гомогліфів
     private static final SpoofChecker SPOOF_CHECKER;
-    private static final Map<String, String> SKELETON_CACHE = new ConcurrentHashMap<>();
     private boolean localRead;
 
     static {
@@ -95,12 +97,14 @@ public class GetPrescript {
                 "urlPrescript",
                 "https://cip.gov.ua/services/cm/api/attachment/download?id="
         ).trim().concat(this.id);
-        this.storePrescriptTo = p.getProperty(
-                "store_prescript_to",
-                "./Prescript"
-        ).trim();
-        if (!this.storePrescriptTo.endsWith("/")) {
-            this.storePrescriptTo = this.storePrescriptTo.concat("/");
+        String storePrescriptToStr = p.getProperty("store_prescript_to", "./Prescript").trim();
+        this.storePrescriptTo = Paths.get(storePrescriptToStr).normalize();
+        try {
+            Files.createDirectories(this.storePrescriptTo);
+            logger.debug("Ensured directory exists: {}", this.storePrescriptTo);
+        } catch (IOException e) {
+            logger.error("Failed to create directory {}: {}", this.storePrescriptTo, e.getMessage(), e);
+            throw new RuntimeException("Cannot create directory: " + this.storePrescriptTo, e);
         }
         this.userAgent = this.prop.getProperty(
                 "userAgent",
@@ -265,88 +269,22 @@ public class GetPrescript {
         throw new IOException("Failed to fetch prescript: no attempts succeeded");
     }
 
-    private String extractTld(String domain) {
-        if (domain == null || domain.isEmpty()) {
-            return null;
-        }
-        int lastDot = domain.lastIndexOf('.');
-        if (lastDot == -1 || lastDot == domain.length() - 1) {
-            return null;
-        }
-        return domain.substring(lastDot);
-    }
-
     public String[] getBodyPrescript() {
-        if (bodyPrescript.length() > 10_000_000) {
-            logger.warn("Prescript ID {} is too large ({} bytes), skipping", id, bodyPrescript.length());
+        if (bodyPrescript == null || bodyPrescript.length() > 10_000_000) {
+            logger.warn("Prescript ID {} is too large ({} bytes) or null, skipping", id, bodyPrescript != null ? bodyPrescript.length() : 0);
             return new String[0];
         }
         DomainValidator domainValidator = DomainValidator.getInstance(true);
         InetAddressValidator ipValidator = InetAddressValidator.getInstance();
-        StringBuilder sb = new StringBuilder();
+        Set<String> validDomains = new HashSet<>();
 
         for (String s : this.bodyPrescript.split("\n")) {
-            String cleaned = s.trim()
-                    .replaceAll("(?i)^(https?://|ftp://)", "")
-                    .replaceAll("\\s+", "")
-                    .toLowerCase();
-
-            // Видаляємо субдомени
-            for (String service : serviceSubdomains) {
-                if (cleaned.startsWith(service + ".")) {
-                    cleaned = cleaned.substring(service.length() + 1);
-                    break;
-                }
-            }
-
-            cleaned = cleaned
-                    .replaceAll("/.*$", "");
-
-            if (cleaned.isBlank() || cleaned.length() > 255) {
-                logger.warn("Skipping domain due to invalid length: {}", cleaned);
-                continue;
-            }
-
-            try {
-                String idnDomain = IDN.toASCII(cleaned, IDN.ALLOW_UNASSIGNED);
-                if (domainValidator.isValid(idnDomain)) {
-                    String tld = extractTld(idnDomain);
-                    if (tld == null || !domainValidator.isValidTld(tld)) {
-                        logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
-                        continue;
-                    }
-                    sb.append(idnDomain).append("\n");
-                    logger.info("Valid IDN domain: {}", idnDomain);
-                } else if (ipValidator.isValid(cleaned)) {
-                    logger.warn("Skipping IP address: {}", cleaned);
-                    continue;
-                } else {
-                    logger.warn("Invalid IDN domain: {}", cleaned);
-                    continue;
-                }
-
-                boolean hasNonLatin = cleaned.chars().anyMatch(c -> c > 127);
-                if (hasNonLatin) {
-                    String latinized = SKELETON_CACHE.computeIfAbsent(cleaned, SPOOF_CHECKER::getSkeleton);
-                    String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED);
-                    if (domainValidator.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
-                        String latinizedTld = extractTld(latinizedIdn);
-                        if (latinizedTld == null || !domainValidator.isValidTld(latinizedTld)) {
-                            logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
-                            continue;
-                        }
-                        sb.append(latinizedIdn).append("\n");
-                        logger.info("Valid latinized domain: {} (from {} -> {})", latinizedIdn, cleaned, latinized);
-                    } else {
-                        logger.debug("Latinized domain invalid or identical: {} (from {} -> {})", latinized, cleaned, latinized);
-                    }
-                }
-            } catch (IllegalArgumentException e) {
-                logger.warn("Failed to process: {} ({})", cleaned, e.getMessage());
-            }
+            validDomains.addAll(DomainValidatorUtil.validateDomain(
+                    s, serviceSubdomains, null, domainValidator, ipValidator, SPOOF_CHECKER, logger,
+                    false, null, null));
         }
 
-        return sb.length() > 0 ? sb.toString().split("\n") : new String[0];
+        return validDomains.toArray(new String[0]);
     }
 
     public GetPrescript storePrescriptTo() {
@@ -387,11 +325,13 @@ public class GetPrescript {
     }
 
     protected boolean mkDir() {
-        File md = new File(this.storePrescriptTo);
-        if (md.exists()) {
-            return md.isDirectory();
+        try {
+            Files.createDirectories(storePrescriptTo);
+            return true;
+        } catch (IOException e) {
+            logger.warn("Failed to create directory {}: {}", storePrescriptTo, e.getMessage());
+            return false;
         }
-        return md.mkdirs();
     }
 
     protected boolean isExists(String fn) {
@@ -411,7 +351,8 @@ public class GetPrescript {
     }
 
     public String getFileName() {
-        String fileName = this.storePrescriptTo + this.id + "~" + (origFileName != null ? origFileName : this.id + "_prescript.txt");
+        Path filePath = storePrescriptTo.resolve(this.id + "~" + (origFileName != null ? origFileName : this.id + "_prescript.txt"));
+        String fileName = filePath.toString();
         logger.debug("getFileName ⮕ {} ⮕ {}", fileName, isExists(fileName));
         return fileName;
     }
@@ -419,5 +360,4 @@ public class GetPrescript {
     public boolean isLocalRead() {
         return this.localRead;
     }
-
 }

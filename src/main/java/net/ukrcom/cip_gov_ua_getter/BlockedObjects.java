@@ -12,11 +12,13 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.net.IDN;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.TreeSet;
+import org.apache.commons.validator.routines.DomainValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,10 +87,31 @@ public class BlockedObjects {
             File blockedFile = new File(blockedName.trim());
             if (blockedFile.exists() && blockedFile.isFile() && blockedFile.canRead()) {
                 logger.info("Reading blocked domains from {}", blockedName);
+                DomainValidator domainValidator = DomainValidator.getInstance(true);
                 Files.lines(Paths.get(blockedFile.getPath()), StandardCharsets.UTF_8)
                         .map(String::trim)
                         .filter(line -> !line.isEmpty())
-                        .forEach(line -> this.addBlockedDomainName(new BlockedDomain(line)));
+                        .forEach(line -> {
+                            if (line.length() > 255) {
+                                logger.warn("Skipping domain from file due to invalid length: {}", line);
+                                return;
+                            }
+                            try {
+                                String idnDomain = IDN.toASCII(line, IDN.ALLOW_UNASSIGNED);
+                                if (idnDomain.length() > 255) {
+                                    logger.warn("Skipping domain after IDN conversion due to length: {}", idnDomain);
+                                    return;
+                                }
+                                if (domainValidator.isValid(idnDomain)) {
+                                    this.addBlockedDomainName(new BlockedDomain(idnDomain));
+                                    logger.info("Added domain from file: {}", idnDomain);
+                                } else {
+                                    logger.warn("Invalid domain in file: {}", line);
+                                }
+                            } catch (IllegalArgumentException e) {
+                                logger.warn("Failed to process domain from file: {} ({})", line, e.getMessage());
+                            }
+                        });
             } else {
                 logger.warn("File {} does not exist or is not readable", blockedName);
             }

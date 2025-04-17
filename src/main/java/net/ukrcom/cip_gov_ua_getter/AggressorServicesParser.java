@@ -16,6 +16,7 @@
 package net.ukrcom.cip_gov_ua_getter;
 
 import com.ibm.icu.text.SpoofChecker;
+import java.io.File;
 import org.apache.commons.validator.routines.DomainValidator;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.pdfbox.Loader;
@@ -28,36 +29,39 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.*;
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.IDN;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Парсер для отримання списку доменів із сервісів держави-агресора.
+ *
+ * @author olden
+ */
 public class AggressorServicesParser {
 
     private static final Logger logger = LoggerFactory.getLogger(AggressorServicesParser.class);
     private static final DomainValidator DOMAIN_VALIDATOR = DomainValidator.getInstance(true);
     private static final InetAddressValidator IP_VALIDATOR = InetAddressValidator.getInstance();
     private static final SpoofChecker SPOOF_CHECKER = new SpoofChecker.Builder().build();
-    private static final ConcurrentHashMap<String, String> SKELETON_CACHE = new ConcurrentHashMap<>();
 
     private final Properties properties;
-    private final String manualDir;
+    private final Path manualDir;
     private final boolean debug;
     private final String sourceDomain;
     private final String primaryPdfName;
@@ -66,7 +70,15 @@ public class AggressorServicesParser {
     public AggressorServicesParser(Properties properties, boolean debug) {
         this.properties = properties;
         this.debug = debug;
-        this.manualDir = properties.getProperty("AggressorServices_prescript_to", "./PRESCRIPT");
+        String manualDirStr = properties.getProperty("AggressorServices_prescript_to", "./PRESCRIPT").trim();
+        this.manualDir = Paths.get(manualDirStr).normalize();
+        try {
+            Files.createDirectories(this.manualDir);
+            logger.debug("Ensured directory exists: {}", this.manualDir);
+        } catch (IOException e) {
+            logger.error("Failed to create directory {}: {}", this.manualDir, e.getMessage(), e);
+            throw new RuntimeException("Cannot create directory: " + this.manualDir, e);
+        }
         this.sourceDomain = properties.getProperty("AggressorServices_SOURCE_DOMAIN", "webportal.nrada.gov.ua");
         this.primaryPdfName = properties.getProperty("AggressorServices_PRIMARY_PDF_NAME", "Perelik.#450.2023.07.06.pdf");
         String subdomains = properties.getProperty("SERVICE_SUBDOMAINS",
@@ -85,7 +97,6 @@ public class AggressorServicesParser {
         if (serviceSubdomains.length == 0) {
             logger.warn("No valid service subdomains defined in SERVICE_SUBDOMAINS");
         }
-        new File(manualDir).mkdirs();
     }
 
     public Set<BlockedDomain> parse() {
@@ -101,11 +112,10 @@ public class AggressorServicesParser {
             disableSSLCertificateVerification();
             String pdfUrl = findPdfUrl(targetUrl);
             if (pdfUrl != null) {
-                String primaryPdfPath = manualDir + primaryPdfName;
-                downloadPdf(pdfUrl, primaryPdfPath);
+                Path primaryPdfPath = manualDir.resolve(primaryPdfName);
+                downloadPdf(pdfUrl, primaryPdfPath.toString());
                 logger.info("Successfully downloaded PDF to: {}", primaryPdfPath);
-
-                domains.addAll(extractDomainsFromPDF(primaryPdfPath));
+                domains.addAll(extractDomainsFromPDF(primaryPdfPath.toString()));
                 if (debug) {
                     logger.debug("Extracted {} domains from aggressor services PDF", domains.size());
                 }
@@ -159,16 +169,17 @@ public class AggressorServicesParser {
     }
 
     private void downloadPdf(String pdfUrl, String destinationPath) throws IOException {
-        File file = new File(destinationPath);
-        if (file.exists()) {
-            logger.debug("PDF already exists: {}", destinationPath);
+        Path destPath = Paths.get(destinationPath);
+        if (Files.exists(destPath)) {
+            logger.debug("PDF already exists: {}", destPath);
             return;
         }
+        Files.createDirectories(destPath.getParent());
         URL url = new URL(pdfUrl);
-        try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destinationPath)) {
+        try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
         }
-        logger.debug("Downloaded PDF to: {}", destinationPath);
+        logger.debug("Downloaded PDF to: {}", destPath);
     }
 
     private Set<BlockedDomain> extractDomainsFromPDF(String filePath) {
@@ -194,7 +205,10 @@ public class AggressorServicesParser {
 
                 while (domainMatcher.find()) {
                     String match = domainMatcher.group();
-                    extractAndAddDomains(match, domains);
+                    DomainValidatorUtil.validateDomain(
+                            match, serviceSubdomains, sourceDomain, DOMAIN_VALIDATOR, IP_VALIDATOR, SPOOF_CHECKER, logger,
+                            true, LocalDateTime.now(), domains);
+
                 }
             }
         } catch (IOException e) {
@@ -204,95 +218,4 @@ public class AggressorServicesParser {
         return domains;
     }
 
-    private void extractAndAddDomains(String urlOrDomain, Set<BlockedDomain> domains) {
-        try {
-            String domain = urlOrDomain
-                    .trim()
-                    .replaceAll("(?i)^(https?://|ftp://)", "")
-                    .replaceAll("\\s+", "")
-                    .toLowerCase();
-
-            for (String service : serviceSubdomains) {
-                if (domain.startsWith(service + ".")) {
-                    domain = domain.substring(service.length() + 1);
-                    break;
-                }
-            }
-
-            int endIndex = domain.indexOf("/");
-            if (endIndex != -1) {
-                domain = domain.substring(0, endIndex);
-            }
-            endIndex = domain.indexOf(":");
-            if (endIndex != -1) {
-                domain = domain.substring(0, endIndex);
-            }
-            endIndex = domain.indexOf("?");
-            if (endIndex != -1) {
-                domain = domain.substring(0, endIndex);
-            }
-
-            if (domain.isBlank() || domain.length() > 255) {
-                logger.warn("Skipping domain due to invalid length: {}", domain);
-                return;
-            }
-
-            if (domain.equals(this.sourceDomain)) {
-                logger.warn("Skipping domain: {}", domain);
-                return;
-            }
-
-            String idnDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
-            if (DOMAIN_VALIDATOR.isValid(idnDomain)) {
-                String tld = extractTld(idnDomain);
-                if (tld == null || !DOMAIN_VALIDATOR.isValidTld(tld)) {
-                    logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
-                    return;
-                }
-                BlockedDomain bd = new BlockedDomain(domain, true, LocalDateTime.now());
-                domains.add(bd);
-                logger.info("Valid IDN domain: {}", domain);
-            } else if (IP_VALIDATOR.isValid(domain)) {
-                logger.warn("Skipping IP address: {}", domain);
-                return;
-            } else {
-                logger.warn("Invalid IDN domain: {}", domain);
-                return;
-            }
-
-            boolean hasNonLatin = domain.chars().anyMatch(c -> c > 127);
-            if (hasNonLatin) {
-                String latinized = SKELETON_CACHE.computeIfAbsent(domain, SPOOF_CHECKER::getSkeleton);
-                String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED).toLowerCase();
-                if (DOMAIN_VALIDATOR.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
-                    String latinizedTld = extractTld(latinizedIdn);
-                    if (latinizedTld == null || !DOMAIN_VALIDATOR.isValidTld(latinizedTld)) {
-                        logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
-                        return;
-                    }
-                    BlockedDomain bd = new BlockedDomain(latinizedIdn, true, LocalDateTime.now());
-                    domains.add(bd);
-                    logger.info("Valid latinized domain: {} (from {} ⮕ {})", latinizedIdn, domain, latinized);
-                } else {
-                    logger.debug("Latinized domain invalid or identical: {} (from {} ⮕ {})", latinized, domain, latinized);
-                }
-            }
-
-        } catch (Exception e) {
-            if (debug) {
-                logger.debug("Error processing domain {}: {}", urlOrDomain, e.getMessage());
-            }
-        }
-    }
-
-    private String extractTld(String domain) {
-        if (domain == null || domain.isEmpty()) {
-            return null;
-        }
-        int lastDot = domain.lastIndexOf('.');
-        if (lastDot == -1 || lastDot == domain.length() - 1) {
-            return null;
-        }
-        return domain.substring(lastDot);
-    }
 }

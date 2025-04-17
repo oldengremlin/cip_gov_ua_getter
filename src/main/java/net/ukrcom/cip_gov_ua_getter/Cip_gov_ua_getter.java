@@ -136,6 +136,10 @@ public class Cip_gov_ua_getter {
                     }
 
                     for (String domain : gp.getBodyPrescript()) {
+                        if (domain.length() > 255) {
+                            logger.warn("Skipping domain due to invalid length: {}", domain);
+                            continue;
+                        }
                         BlockedDomain bd = new BlockedDomain(domain, block, post.getString("date"));
                         if (bo.addBlockedDomainName(bd)) {
                             logger.info("{} {} [ {} \"{}\"]",
