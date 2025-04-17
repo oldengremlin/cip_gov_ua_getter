@@ -19,22 +19,21 @@
     <!-- Логер для твого пакету -->
     <logger name="net.ukrcom.cip_gov_ua_getter" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE" />
     </logger>
 
     <!-- Логери для PDFBox і FontBox -->
     <logger name="org.apache.pdfbox" level="WARN" additivity="false">
         <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE" />
     </logger>
     <logger name="org.apache.fontbox" level="WARN" additivity="false">
         <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE" />
     </logger>
 
     <!-- Кореневий логер -->
     <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-    </root>
-
-    <root level="info">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
     </root>
