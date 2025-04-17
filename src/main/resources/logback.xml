@@ -15,6 +15,25 @@
             <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
+
+    <!-- Логер для твого пакету -->
+    <logger name="net.ukrcom.cip_gov_ua_getter" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Логери для PDFBox і FontBox -->
+    <logger name="org.apache.pdfbox" level="WARN" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="org.apache.fontbox" level="WARN" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Кореневий логер -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
     <root level="info">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
