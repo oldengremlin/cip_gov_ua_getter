@@ -31,10 +31,31 @@ import java.util.regex.Pattern;
 public class DomainValidatorUtil {
 
     private static final ConcurrentHashMap<String, String> SKELETON_CACHE = new ConcurrentHashMap<>();
-    // Регулярний вираз для виділення валідних доменів, включаючи повну підтримку Unicode
+    private static final ConcurrentHashMap<String, Boolean> TLD_CACHE = new ConcurrentHashMap<>();
+    // Регулярний вираз для виділення валідних доменів, включаючи повну підтримку Unicode і подвійних дефісів
+    /*
+        Розбір DOMAIN_CLEAN_PATTERN
+        1. [a-zA-Z0-9\\p{L}\\p{M}*-]+
+           - Матчує першу частину домену (до крапки), дозволяючи дефіси.
+           - [a-zA-Z0-9\\p{L}\\p{M}*-]: Символьний клас:
+             - a-zA-Z: Латинські літери.
+             - 0-9: Цифри.
+             - \\p{L}: Unicode-літери (кирилиця, китайські ієрогліфи тощо).
+             - \\p{M}*: Нуль або більше діакритичних знаків.
+             - -: Дефіс (дозволяє --).
+           - +: Один або більше символів.
+           - Приклад: nasepravda, xn--b1akbpgy3fwa, приклад.
+
+        2. (?:\\.[a-zA-Z0-9\\p{L}\\p{M}*-]+)+
+           - Матчує одну або більше частин після крапки (TLD або багаторівневий домен).
+           - \\.: Буквальна крапка.
+           - [a-zA-Z0-9\\p{L}\\p{M}*-]+: Символьний клас, як вище.
+           - +: Одна або більше груп із крапкою.
+           - Приклад: .cz, .xn--p1acf, .co.uk.
+     */
     private static final Pattern DOMAIN_CLEAN_PATTERN = Pattern.compile(
-            "[a-zA-Z0-9\\p{L}\\p{M}*]+(?:-[a-zA-Z0-9\\p{L}\\p{M}*]+)*"
-            + "(?:\\.[a-zA-Z0-9\\p{L}\\p{M}*]+(?:-[a-zA-Z0-9\\p{L}\\p{M}*]+)*)+"
+            "[a-zA-Z0-9\\p{L}\\p{M}*-]+"
+            + "(?:\\.[a-zA-Z0-9\\p{L}\\p{M}*-]+)+"
     );
 
     public static Set<String> validateDomain(String rawDomain, String[] serviceSubdomains, String sourceDomain,
@@ -104,7 +125,13 @@ public class DomainValidatorUtil {
                 // Перевіряємо валідність IDN-домену
                 if (domainValidator.isValid(idnDomain)) {
                     String tld = extractTld(idnDomain);
-                    if (tld == null || !domainValidator.isValidTld(tld)) {
+                    if (tld == null) {
+                        logger.warn("Invalid TLD (null) for domain: {}", idnDomain);
+                        continue;
+                    }
+                    // Перевіряємо TLD через кеш
+                    Boolean isValidTld = TLD_CACHE.computeIfAbsent(tld, k -> domainValidator.isValidTld(k));
+                    if (!isValidTld) {
                         logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
                         continue;
                     }
@@ -129,15 +156,21 @@ public class DomainValidatorUtil {
                         logger.warn("Skipping latinized domain due to length: {}", latinizedIdn);
                     } else if (domainValidator.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
                         String latinizedTld = extractTld(latinizedIdn);
-                        if (latinizedTld == null || !domainValidator.isValidTld(latinizedTld)) {
-                            logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
-                        } else {
-                            validDomains.add(latinizedIdn);
-                            if (includeBlockedDomain) {
-                                blockedDomains.add(new BlockedDomain(latinizedIdn, true, dateTime));
-                            }
-                            logger.info("Valid latinized domain: {} (from {} ⮕ {})", latinizedIdn, domain, latinized);
+                        if (latinizedTld == null) {
+                            logger.warn("Invalid TLD (null) for latinized domain: {}", latinizedIdn);
+                            continue;
                         }
+                        // Перевіряємо TLD через кеш для латинізованого домену
+                        Boolean isValidLatinizedTld = TLD_CACHE.computeIfAbsent(latinizedTld, k -> domainValidator.isValidTld(k));
+                        if (!isValidLatinizedTld) {
+                            logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
+                            continue;
+                        }
+                        validDomains.add(latinizedIdn);
+                        if (includeBlockedDomain) {
+                            blockedDomains.add(new BlockedDomain(latinizedIdn, true, dateTime));
+                        }
+                        logger.info("Valid latinized domain: {} (from {} ⮕ {})", latinizedIdn, domain, latinized);
                     } else {
                         logger.debug("Latinized domain invalid or identical: {} (from {} ⮕ {})", latinized, domain, latinized);
                     }
