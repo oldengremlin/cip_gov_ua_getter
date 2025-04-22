@@ -284,7 +284,7 @@ public class GetPrescript {
                     false, null, null));
         }
 
-        return validDomains.toArray(new String[0]);
+        return validDomains.toArray(String[]::new);
     }
 
     public GetPrescript storePrescriptTo() {
