@@ -25,10 +25,21 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class DomainValidatorUtil {
 
     private static final ConcurrentHashMap<String, String> SKELETON_CACHE = new ConcurrentHashMap<>();
+    /*
+        Дозволяє букви, цифри, дефіси, Unicode-символи (\\p{L}\\p{M}*) для IDN.
+        Дозволяє крапки між частинами домену.
+        Не включає сторонні символи (,, ;, !, / тощо).
+        Використовується для виділення валідної частини домену.
+     */
+    private static final Pattern DOMAIN_CLEAN_PATTERN = Pattern.compile(
+            "[a-zA-Z0-9\\p{L}\\p{M}*-]+(?:\\.[a-zA-Z0-9\\p{L}\\p{M}*-]+)*"
+    );
 
     public static Set<String> validateDomain(String rawDomain, String[] serviceSubdomains, String sourceDomain,
             DomainValidator domainValidator, InetAddressValidator ipValidator,
@@ -37,12 +48,30 @@ public class DomainValidatorUtil {
         Set<String> validDomains = new HashSet<>();
 
         try {
+            // Очищаємо вхідну строку від протоколів і пробілів
             String domain = rawDomain
                     .trim()
-                    .replaceAll("(?i)^(https?://|ftp://)", "")
-                    .replaceAll("\\s+", "")
+                    .replaceAll("(?i)^(https?://|ftp://)", "") // Видаляємо протоколи
+                    .replaceAll("\\s+", "") // Видаляємо пробіли
                     .toLowerCase();
 
+            // Очищаємо домен від неприпустимих символів, витягуємо валідну частину
+            Matcher matcher = DOMAIN_CLEAN_PATTERN.matcher(domain);
+            if (matcher.find()) {
+                domain = matcher.group();
+                logger.debug("Cleaned domain: {} → {}", rawDomain, domain);
+            } else {
+                logger.warn("Skipping domain due to no valid domain part: {}", domain);
+                return validDomains;
+            }
+
+            // Перевірка на порожній домен або надмірну довжину
+            if (domain.isBlank() || domain.length() > 255) {
+                logger.warn("Skipping domain due to invalid length: {}", domain);
+                return validDomains;
+            }
+
+            // Видаляємо субдомени зі списку serviceSubdomains
             for (String service : serviceSubdomains) {
                 if (domain.startsWith(service + ".")) {
                     domain = domain.substring(service.length() + 1);
@@ -50,6 +79,7 @@ public class DomainValidatorUtil {
                 }
             }
 
+            // Видаляємо шляхи, порти, параметри
             int endIndex = domain.indexOf("/");
             if (endIndex != -1) {
                 domain = domain.substring(0, endIndex);
@@ -63,22 +93,20 @@ public class DomainValidatorUtil {
                 domain = domain.substring(0, endIndex);
             }
 
-            if (domain.isBlank() || domain.length() > 255) {
-                logger.warn("Skipping domain due to invalid length: {}", domain);
-                return validDomains;
-            }
-
+            // Пропускаємо sourceDomain, якщо він є
             if (sourceDomain != null && domain.equals(sourceDomain)) {
                 logger.warn("Skipping source domain: {}", domain);
                 return validDomains;
             }
 
+            // Конвертуємо в Punycode
             String idnDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
             if (idnDomain.length() > 255) {
                 logger.warn("Skipping domain after IDN conversion due to length: {}", idnDomain);
                 return validDomains;
             }
 
+            // Перевіряємо валідність IDN-домену
             if (domainValidator.isValid(idnDomain)) {
                 String tld = extractTld(idnDomain);
                 if (tld == null || !domainValidator.isValidTld(tld)) {
@@ -97,6 +125,7 @@ public class DomainValidatorUtil {
                 logger.warn("Invalid IDN domain: {}", domain);
             }
 
+            // Обробка гомогліфів для нелатинських символів
             boolean hasNonLatin = domain.chars().anyMatch(c -> c > 127);
             if (hasNonLatin) {
                 String latinized = SKELETON_CACHE.computeIfAbsent(domain, spoofChecker::getSkeleton);
