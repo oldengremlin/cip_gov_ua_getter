@@ -31,14 +31,10 @@ import java.util.regex.Pattern;
 public class DomainValidatorUtil {
 
     private static final ConcurrentHashMap<String, String> SKELETON_CACHE = new ConcurrentHashMap<>();
-    /*
-        Дозволяє букви, цифри, дефіси, Unicode-символи (\\p{L}\\p{M}*) для IDN.
-        Дозволяє крапки між частинами домену.
-        Не включає сторонні символи (,, ;, !, / тощо).
-        Використовується для виділення валідної частини домену.
-     */
+    // Регулярний вираз для виділення валідних доменів, включаючи повну підтримку Unicode
     private static final Pattern DOMAIN_CLEAN_PATTERN = Pattern.compile(
-            "[a-zA-Z0-9\\p{L}\\p{M}*-]+(?:\\.[a-zA-Z0-9\\p{L}\\p{M}*-]+)*"
+            "[a-zA-Z0-9\\p{L}\\p{M}*]+(?:-[a-zA-Z0-9\\p{L}\\p{M}*]+)*"
+            + "(?:\\.[a-zA-Z0-9\\p{L}\\p{M}*]+(?:-[a-zA-Z0-9\\p{L}\\p{M}*]+)*)+"
     );
 
     public static Set<String> validateDomain(String rawDomain, String[] serviceSubdomains, String sourceDomain,
@@ -49,103 +45,107 @@ public class DomainValidatorUtil {
 
         try {
             // Очищаємо вхідну строку від протоколів і пробілів
-            String domain = rawDomain
+            String cleanedInput = rawDomain
                     .trim()
                     .replaceAll("(?i)^(https?://|ftp://)", "") // Видаляємо протоколи
                     .replaceAll("\\s+", "") // Видаляємо пробіли
                     .toLowerCase();
 
-            // Очищаємо домен від неприпустимих символів, витягуємо валідну частину
-            Matcher matcher = DOMAIN_CLEAN_PATTERN.matcher(domain);
-            if (matcher.find()) {
-                domain = matcher.group();
+            // Витягуємо всі валідні домени зі строки
+            Matcher matcher = DOMAIN_CLEAN_PATTERN.matcher(cleanedInput);
+            boolean found = false;
+
+            while (matcher.find()) {
+                found = true;
+                String domain = matcher.group();
                 logger.debug("Cleaned domain: {} → {}", rawDomain, domain);
-            } else {
-                logger.warn("Skipping domain due to no valid domain part: {}", domain);
-                return validDomains;
-            }
 
-            // Перевірка на порожній домен або надмірну довжину
-            if (domain.isBlank() || domain.length() > 255) {
-                logger.warn("Skipping domain due to invalid length: {}", domain);
-                return validDomains;
-            }
-
-            // Видаляємо субдомени зі списку serviceSubdomains
-            for (String service : serviceSubdomains) {
-                if (domain.startsWith(service + ".")) {
-                    domain = domain.substring(service.length() + 1);
-                    break;
+                // Перевірка на порожній домен або надмірну довжину
+                if (domain.isBlank() || domain.length() > 255) {
+                    logger.warn("Skipping domain due to invalid length: {}", domain);
+                    continue;
                 }
-            }
 
-            // Видаляємо шляхи, порти, параметри
-            int endIndex = domain.indexOf("/");
-            if (endIndex != -1) {
-                domain = domain.substring(0, endIndex);
-            }
-            endIndex = domain.indexOf(":");
-            if (endIndex != -1) {
-                domain = domain.substring(0, endIndex);
-            }
-            endIndex = domain.indexOf("?");
-            if (endIndex != -1) {
-                domain = domain.substring(0, endIndex);
-            }
-
-            // Пропускаємо sourceDomain, якщо він є
-            if (sourceDomain != null && domain.equals(sourceDomain)) {
-                logger.warn("Skipping source domain: {}", domain);
-                return validDomains;
-            }
-
-            // Конвертуємо в Punycode
-            String idnDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
-            if (idnDomain.length() > 255) {
-                logger.warn("Skipping domain after IDN conversion due to length: {}", idnDomain);
-                return validDomains;
-            }
-
-            // Перевіряємо валідність IDN-домену
-            if (domainValidator.isValid(idnDomain)) {
-                String tld = extractTld(idnDomain);
-                if (tld == null || !domainValidator.isValidTld(tld)) {
-                    logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
-                    return validDomains;
-                }
-                validDomains.add(idnDomain);
-                if (includeBlockedDomain) {
-                    blockedDomains.add(new BlockedDomain(idnDomain, true, dateTime));
-                }
-                logger.info("Valid IDN domain: {}", idnDomain);
-            } else if (ipValidator.isValid(domain)) {
-                logger.warn("Skipping IP address: {}", domain);
-                return validDomains;
-            } else {
-                logger.warn("Invalid IDN domain: {}", domain);
-            }
-
-            // Обробка гомогліфів для нелатинських символів
-            boolean hasNonLatin = domain.chars().anyMatch(c -> c > 127);
-            if (hasNonLatin) {
-                String latinized = SKELETON_CACHE.computeIfAbsent(domain, spoofChecker::getSkeleton);
-                String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED).toLowerCase();
-                if (latinizedIdn.length() > 255) {
-                    logger.warn("Skipping latinized domain due to length: {}", latinizedIdn);
-                } else if (domainValidator.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
-                    String latinizedTld = extractTld(latinizedIdn);
-                    if (latinizedTld == null || !domainValidator.isValidTld(latinizedTld)) {
-                        logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
-                    } else {
-                        validDomains.add(latinizedIdn);
-                        if (includeBlockedDomain) {
-                            blockedDomains.add(new BlockedDomain(latinizedIdn, true, dateTime));
-                        }
-                        logger.info("Valid latinized domain: {} (from {} ⮕ {})", latinizedIdn, domain, latinized);
+                // Видаляємо субдомени зі списку serviceSubdomains
+                for (String service : serviceSubdomains) {
+                    if (domain.startsWith(service + ".")) {
+                        domain = domain.substring(service.length() + 1);
+                        break;
                     }
-                } else {
-                    logger.debug("Latinized domain invalid or identical: {} (from {} ⮕ {})", latinized, domain, latinized);
                 }
+
+                // Видаляємо шляхи, порти, параметри
+                int endIndex = domain.indexOf("/");
+                if (endIndex != -1) {
+                    domain = domain.substring(0, endIndex);
+                }
+                endIndex = domain.indexOf(":");
+                if (endIndex != -1) {
+                    domain = domain.substring(0, endIndex);
+                }
+                endIndex = domain.indexOf("?");
+                if (endIndex != -1) {
+                    domain = domain.substring(0, endIndex);
+                }
+
+                // Пропускаємо sourceDomain, якщо він є
+                if (sourceDomain != null && domain.equals(sourceDomain)) {
+                    logger.warn("Skipping source domain: {}", domain);
+                    continue;
+                }
+
+                // Конвертуємо в Punycode
+                String idnDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
+                if (idnDomain.length() > 255) {
+                    logger.warn("Skipping domain after IDN conversion due to length: {}", idnDomain);
+                    continue;
+                }
+
+                // Перевіряємо валідність IDN-домену
+                if (domainValidator.isValid(idnDomain)) {
+                    String tld = extractTld(idnDomain);
+                    if (tld == null || !domainValidator.isValidTld(tld)) {
+                        logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
+                        continue;
+                    }
+                    validDomains.add(idnDomain);
+                    if (includeBlockedDomain) {
+                        blockedDomains.add(new BlockedDomain(idnDomain, true, dateTime));
+                    }
+                    logger.info("Valid IDN domain: {}", idnDomain);
+                } else if (ipValidator.isValid(domain)) {
+                    logger.warn("Skipping IP address: {}", domain);
+                    continue;
+                } else {
+                    logger.warn("Invalid IDN domain: {}", domain);
+                }
+
+                // Обробка гомогліфів для нелатинських символів
+                boolean hasNonLatin = domain.chars().anyMatch(c -> c > 127);
+                if (hasNonLatin) {
+                    String latinized = SKELETON_CACHE.computeIfAbsent(domain, spoofChecker::getSkeleton);
+                    String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED).toLowerCase();
+                    if (latinizedIdn.length() > 255) {
+                        logger.warn("Skipping latinized domain due to length: {}", latinizedIdn);
+                    } else if (domainValidator.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
+                        String latinizedTld = extractTld(latinizedIdn);
+                        if (latinizedTld == null || !domainValidator.isValidTld(latinizedTld)) {
+                            logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
+                        } else {
+                            validDomains.add(latinizedIdn);
+                            if (includeBlockedDomain) {
+                                blockedDomains.add(new BlockedDomain(latinizedIdn, true, dateTime));
+                            }
+                            logger.info("Valid latinized domain: {} (from {} ⮕ {})", latinizedIdn, domain, latinized);
+                        }
+                    } else {
+                        logger.debug("Latinized domain invalid or identical: {} (from {} ⮕ {})", latinized, domain, latinized);
+                    }
+                }
+            }
+
+            if (!found) {
+                logger.warn("No valid domain found in: {}", rawDomain);
             }
 
         } catch (Exception e) {
