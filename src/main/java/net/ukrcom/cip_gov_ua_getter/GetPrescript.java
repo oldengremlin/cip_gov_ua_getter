@@ -262,7 +262,7 @@ public class GetPrescript {
                 }
                 return "data:application/octet-stream;base64," + java.util.Base64.getEncoder().encodeToString(content);
             } else {
-                logger.warn("executeAjaxRequest: {} is text: {}", urlPrescript, returnAsDataUrl);
+                logger.debug("executeAjaxRequest: {} is text: {}", urlPrescript, returnAsDataUrl);
                 // Для текстових файлів використовуємо JavaScript
                 String script = """
                     async () => {
@@ -459,6 +459,11 @@ public class GetPrescript {
         if (cleanedName.matches(".*[\\/:*?\"<>|].*")) {
             logger.warn("Invalid characters in filename for ID {}: {} : {}", id, fileName, cleanedName);
             cleanedName = id + "_prescript" + (ext.isEmpty() ? ".unknown" : ext);
+        }
+
+        if (cleanedName.getBytes(StandardCharsets.UTF_8).length > 255) {
+            logger.warn("Cleaned filename still too long for ID {}: {}, trimming further", id, cleanedName);
+            cleanedName = trimToUtf8Bytes(cleanedName, 255);
         }
 
         this.origFileName = cleanedName;
