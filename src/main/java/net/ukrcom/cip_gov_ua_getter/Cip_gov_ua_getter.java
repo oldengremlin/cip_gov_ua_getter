@@ -32,6 +32,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ch.qos.logback.classic.Level;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Set;
 
@@ -74,7 +76,8 @@ public class Cip_gov_ua_getter {
         try {
             // Завантаження конфігурації
             Properties prop = new Properties();
-            try (InputStream input = new FileInputStream(configPath)) {
+//            try (InputStream input = new FileInputStream(configPath)) {
+            try (InputStreamReader input = new InputStreamReader(new FileInputStream(configPath), StandardCharsets.UTF_8)) {
                 prop.load(input);
                 logger.debug("Loaded configuration from: {}", configPath);
             } catch (IOException e) {
