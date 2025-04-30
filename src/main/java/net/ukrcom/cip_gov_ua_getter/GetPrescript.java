@@ -46,7 +46,7 @@ import java.util.Set;
 public class GetPrescript {
 
     private static final Logger logger = LoggerFactory.getLogger(GetPrescript.class);
-    private static final long MAX_FILE_SIZE_BYTES_DEFAULT = 10_485_760; // 10 МБ
+    private static final long MAX_FILE_SIZE_BYTES_DEFAULT = 15_728_640; // 15 МБ
 
     protected final String urlPrescript;
     protected String bodyPrescript;
@@ -162,7 +162,7 @@ public class GetPrescript {
         return this;
     }
 
-    private String executeAjaxRequest(boolean returnAsDataUrl) {
+    private String executeAjaxRequest(boolean returnAsDataUrl) throws IOException {
         try (Playwright playwright = Playwright.create(); Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
                 .setHeadless(true)
                 .setChannel("chrome")); BrowserContext context = browser.newContext(new Browser.NewContextOptions()
@@ -220,7 +220,7 @@ public class GetPrescript {
             logger.debug("Navigating to base URL: {}", baseUrl);
             page.navigate(baseUrl);
             page.waitForLoadState();
-
+            /*
             // Формуємо JavaScript-скрипт
             String script = returnAsDataUrl
                     ? """
@@ -242,6 +242,42 @@ public class GetPrescript {
                     """.formatted(FETCH_SCRIPT_TEMPLATE.formatted(this.urlPrescript, this.secChUa));
 
             return (String) page.evaluate(script);
+             */
+
+            if (returnAsDataUrl) {
+                // Для бінарних файлів (PDF) використовуємо прямий запит
+                APIResponse response = page.request().get(urlPrescript);
+                if (!response.ok()) {
+                    throw new IOException("HTTP " + response.status() + ": " + response.statusText());
+                }
+                byte[] content = response.body();
+                if (content.length > maxFileSizeBytes) {
+                    throw new IOException("File too large: " + content.length + " bytes, max allowed: " + maxFileSizeBytes);
+                }
+                return "data:application/octet-stream;base64," + java.util.Base64.getEncoder().encodeToString(content);
+            } else {
+                // Для текстових файлів використовуємо JavaScript
+                String script = """
+                    async () => {
+                        const response = await fetch('%s', {
+                            method: 'GET',
+                            headers: {
+                                'Accept': 'text/plain, */*',
+                                'Sec-Ch-Ua': '%s',
+                                'Sec-Fetch-Dest': 'empty',
+                                'Sec-Fetch-Mode': 'cors',
+                                'Sec-Fetch-Site': 'same-origin'
+                            }
+                        });
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        return await response.text();
+                    }
+                    """.formatted(urlPrescript, secChUa);
+                return (String) page.evaluate(script);
+            }
+
         }
     }
 

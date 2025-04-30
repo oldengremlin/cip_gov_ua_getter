@@ -141,7 +141,6 @@ public class Cip_gov_ua_getter {
                 // Перевіряємо, чи пост стосується блокування/обмеження
                 boolean isRelevant = false;
                 for (String keyword : banKeywords) {
-                    logger.warn("Check ban keyword: {}", keyword);
                     if (title.matches(".*" + keyword + ".*")) {
                         isRelevant = true;
                         break;
@@ -155,7 +154,6 @@ public class Cip_gov_ua_getter {
                 // Визначаємо дію (блокувати чи розблокувати)
                 boolean block = true;
                 for (String keyword : unbanKeywords) {
-                    logger.warn("Check unban keyword: {}", keyword);
                     if (title.matches(".*" + keyword + ".*")) {
                         block = false;
                         break;
