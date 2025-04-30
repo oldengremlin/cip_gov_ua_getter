@@ -246,7 +246,7 @@ public class GetPrescript {
              */
 
             if (returnAsDataUrl) {
-                logger.warn("executeAjaxRequest: {} is binary: {}", urlPrescript, returnAsDataUrl);
+                logger.debug("executeAjaxRequest: {} is binary: {}", urlPrescript, returnAsDataUrl);
                 // Для бінарних файлів (PDF) використовуємо прямий запит
                 APIResponse response = page.request().get(urlPrescript);
                 if (!response.ok()) {
@@ -258,7 +258,7 @@ public class GetPrescript {
                     logger.warn("File too large: {}  bytes, max allowed: {}", content.length, maxFileSizeBytes);
                     throw new IOException("File too large: " + content.length + " bytes, max allowed: " + maxFileSizeBytes);
                 } else {
-                    logger.warn("File size: {}  bytes", content.length);
+                    logger.debug("File size: {}  bytes", content.length);
                 }
                 return "data:application/octet-stream;base64," + java.util.Base64.getEncoder().encodeToString(content);
             } else {
@@ -373,11 +373,11 @@ public class GetPrescript {
             for (int attempt = 1; attempt <= 3; attempt++) {
                 try {
                     String dataUrl = executeAjaxRequest(true);
-                    logger.warn("dataUrl length: {}", dataUrl.length());
+                    logger.debug("dataUrl length: {}", dataUrl.length());
                     byte[] fileContent = java.util.Base64.getDecoder().decode(dataUrl.split(",")[1]);
-                    logger.warn("fileContent length: {}", fileContent.length);
+                    logger.debug("fileContent length: {}", fileContent.length);
                     if (fileContent.length > maxFileSizeBytes) {
-                        logger.warn("File ID {} is too large: {} bytes, max allowed: {} bytes",
+                        logger.debug("File ID {} is too large: {} bytes, max allowed: {} bytes",
                                 id, fileContent.length, maxFileSizeBytes);
                         try (FileWriter fw = new FileWriter("failed_ids.txt", true)) {
                             fw.write("ID: " + id + ", Error: File too large (" + fileContent.length + " bytes, max " + maxFileSizeBytes + " bytes)\n");
