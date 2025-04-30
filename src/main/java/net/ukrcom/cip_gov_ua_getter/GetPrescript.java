@@ -347,6 +347,7 @@ public class GetPrescript {
                     String dataUrl = executeAjaxRequest(true);
                     logger.warn("dataUrl length: {}", dataUrl.length());
                     byte[] fileContent = java.util.Base64.getDecoder().decode(dataUrl.split(",")[1]);
+                    logger.warn("fileContent length: {}", fileContent.length);
                     if (fileContent.length > maxFileSizeBytes) {
                         logger.warn("File ID {} is too large: {} bytes, max allowed: {} bytes",
                                 id, fileContent.length, maxFileSizeBytes);
