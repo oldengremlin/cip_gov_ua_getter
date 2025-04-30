@@ -355,9 +355,18 @@ public class GetPrescript {
         }
 
         // Перевірка вільного місця
+        long freeSpace = storeDir.getFreeSpace();
         if (logger.isDebugEnabled()) {
-            long freeSpace = storeDir.getFreeSpace();
             logger.debug("Free space in {}: {} bytes", storePrescriptTo, freeSpace);
+        }
+        if (freeSpace < MAX_FILE_SIZE_BYTES_DEFAULT * 2) {
+            logger.error("Not enough disk space for ID {}: {} bytes available", id, freeSpace);
+            try (FileWriter fw = new FileWriter("failed_ids.txt", true)) {
+                fw.write("ID: " + id + ", Error: Not enough disk space (" + freeSpace + " bytes available)\n");
+            } catch (IOException ex) {
+                logger.error("Can't write failed_ids.txt: {}", ex.toString());
+            }
+            return this;
         }
 
         if (this.mkDir()) {
@@ -420,33 +429,63 @@ public class GetPrescript {
     }
 
     public GetPrescript setOrigFileName(String fileName) {
-        /*
-        this.origFileName = fileName;
-        logger.debug("Setting origFileName to {} for ID {}", this.origFileName, id);
-        return this;
-         */
-        // Очищаємо ім'я файлу: замінюємо пробіли на _, обрізаємо до 100 символів
-        if (fileName != null) {
-            String cleanedName = fileName
-                    .replaceAll("[^a-zA-Z0-9а-яА-Я._-]", "_")
-                    .replaceAll("\\s+", "_");
-            if (cleanedName.length() > 100) {
-                cleanedName = cleanedName.substring(0, 100);
-                // Зберігаємо розширення
-                int lastDot = fileName.lastIndexOf('.');
-                if (lastDot > 0) {
-                    String ext = fileName.substring(lastDot);
-                    if (ext.length() <= 10) { // Обмежуємо розширення
-                        cleanedName = cleanedName.substring(0, 100 - ext.length()) + ext;
-                    }
-                }
-            }
-            this.origFileName = cleanedName;
-            logger.debug("Cleaned origFileName to {} for ID {}", this.origFileName, id);
-        } else {
+        if (fileName == null) {
             this.origFileName = null;
+            return this;
         }
+
+        String cleanedName = fileName;
+        // Перевіряємо довжину в байтах UTF-8
+        if (cleanedName.getBytes(StandardCharsets.UTF_8).length > 250) {
+            // Витягуємо розширення
+            int lastDot = fileName.lastIndexOf('.');
+            String namePart = lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
+            String ext = lastDot > 0 ? fileName.substring(lastDot) : "";
+
+            // Обрізаємо основну частину до 240 байт (залишаємо місце для розширення)
+            if (namePart.getBytes(StandardCharsets.UTF_8).length > 240) {
+                namePart = trimToUtf8Bytes(namePart, 240);
+            }
+
+            // Формуємо нове ім’я
+            cleanedName = namePart + ext; // ext уже містить ".", якщо є
+        }
+
+        this.origFileName = cleanedName;
+        logger.debug("Cleaned origFileName to {} for ID {}", this.origFileName, id);
         return this;
+    }
+
+    public static String trimToUtf8Bytes(String input, int maxBytes) {
+        if (input == null) {
+            return null;
+        }
+
+        byte[] utf8 = input.getBytes(StandardCharsets.UTF_8);
+        if (utf8.length <= maxBytes) {
+            return input;
+        }
+
+        int byteCount = 0;
+        int endIndex = 0;
+
+        for (int i = 0; i < input.length(); i++) {
+            String ch = input.substring(i, i + 1);
+            int chByteLen = ch.getBytes(StandardCharsets.UTF_8).length;
+
+            if (byteCount + chByteLen > maxBytes) {
+                break;
+            }
+
+            byteCount += chByteLen;
+            endIndex = i + 1;
+        }
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("Trimmed inString \"{}\" from {} to {} bytes ({} to {} chars)", input, utf8.length, byteCount, input.length(), endIndex);
+        }
+
+        return input.substring(0, endIndex);
     }
 
     public String getOrigFileName() {
