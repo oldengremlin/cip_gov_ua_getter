@@ -245,6 +245,7 @@ public class GetPrescript {
              */
 
             if (returnAsDataUrl) {
+                logger.warn("executeAjaxRequest: {} is binary: {}", urlPrescript, returnAsDataUrl);
                 // Для бінарних файлів (PDF) використовуємо прямий запит
                 APIResponse response = page.request().get(urlPrescript);
                 if (!response.ok()) {
@@ -256,6 +257,7 @@ public class GetPrescript {
                 }
                 return "data:application/octet-stream;base64," + java.util.Base64.getEncoder().encodeToString(content);
             } else {
+                logger.warn("executeAjaxRequest: {} is text: {}", urlPrescript, returnAsDataUrl);
                 // Для текстових файлів використовуємо JavaScript
                 String script = """
                     async () => {
