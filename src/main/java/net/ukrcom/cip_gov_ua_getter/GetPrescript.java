@@ -256,6 +256,8 @@ public class GetPrescript {
                 if (content.length > maxFileSizeBytes) {
                     logger.warn("File too large: {}  bytes, max allowed: {}", content.length, maxFileSizeBytes);
                     throw new IOException("File too large: " + content.length + " bytes, max allowed: " + maxFileSizeBytes);
+                } else {
+                    logger.warn("File size: {}  bytes", content.length);
                 }
                 return "data:application/octet-stream;base64," + java.util.Base64.getEncoder().encodeToString(content);
             } else {
