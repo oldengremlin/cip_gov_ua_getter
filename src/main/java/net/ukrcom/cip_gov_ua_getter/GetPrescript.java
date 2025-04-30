@@ -37,6 +37,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.logging.Level;
 
 /**
  * Клас зчитує перелік доменів з відповідних text/plain файлів у розпорядженнях.
@@ -341,6 +342,24 @@ public class GetPrescript {
             return this;
         }
 
+        // Перевірка прав доступу
+        File storeDir = storePrescriptTo.toFile();
+        if (!storeDir.canWrite()) {
+            logger.error("Directory {} is not writable for ID {}", storePrescriptTo, id);
+            try (FileWriter fw = new FileWriter("failed_ids.txt", true)) {
+                fw.write("ID: " + id + ", Error: Directory not writable: " + storePrescriptTo + "\n");
+            } catch (IOException ex) {
+                logger.error("Can't write failed_ids.txt: {}", ex.toString());
+            }
+            return this;
+        }
+
+        // Перевірка вільного місця
+        if (logger.isDebugEnabled()) {
+            long freeSpace = storeDir.getFreeSpace();
+            logger.debug("Free space in {}: {} bytes", storePrescriptTo, freeSpace);
+        }
+
         if (this.mkDir()) {
             for (int attempt = 1; attempt <= 3; attempt++) {
                 try {
@@ -378,6 +397,8 @@ public class GetPrescript {
                     }
                 }
             }
+        } else {
+            logger.error("Failed to create directory for ID {}: {}", id, storePrescriptTo);
         }
         return this;
     }
@@ -399,8 +420,32 @@ public class GetPrescript {
     }
 
     public GetPrescript setOrigFileName(String fileName) {
+        /*
         this.origFileName = fileName;
         logger.debug("Setting origFileName to {} for ID {}", this.origFileName, id);
+        return this;
+         */
+        // Очищаємо ім'я файлу: замінюємо пробіли на _, обрізаємо до 100 символів
+        if (fileName != null) {
+            String cleanedName = fileName
+                    .replaceAll("[^a-zA-Z0-9а-яА-Я._-]", "_")
+                    .replaceAll("\\s+", "_");
+            if (cleanedName.length() > 100) {
+                cleanedName = cleanedName.substring(0, 100);
+                // Зберігаємо розширення
+                int lastDot = fileName.lastIndexOf('.');
+                if (lastDot > 0) {
+                    String ext = fileName.substring(lastDot);
+                    if (ext.length() <= 10) { // Обмежуємо розширення
+                        cleanedName = cleanedName.substring(0, 100 - ext.length()) + ext;
+                    }
+                }
+            }
+            this.origFileName = cleanedName;
+            logger.debug("Cleaned origFileName to {} for ID {}", this.origFileName, id);
+        } else {
+            this.origFileName = null;
+        }
         return this;
     }
 
