@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ch.qos.logback.classic.Level;
 import java.io.File;
+import java.util.Arrays;
 import java.util.Set;
 
 /**
@@ -83,6 +84,24 @@ public class Cip_gov_ua_getter {
 
             prop.setProperty("debug", debug ? "true" : "false");
 
+            // Завантаження ключових слів для фільтрації
+            String banKeywordsStr = prop.getProperty("ban_keywords", "блокування|обмеження доступу|реалізацію.*обмежувальних");
+            String unbanKeywordsStr = prop.getProperty("unban_keywords", "розблокування|припинення тимчасового");
+            String[] banKeywords = banKeywordsStr.split("\\|");
+            String[] unbanKeywords = unbanKeywordsStr.split("\\|");
+
+            if (banKeywords.length == 0) {
+                logger.warn("No ban_keywords defined in configuration, using default: блокування");
+                banKeywords = new String[]{"блокування"};
+            }
+            if (unbanKeywords.length == 0) {
+                logger.warn("No unban_keywords defined in configuration, using default: розблокування");
+                unbanKeywords = new String[]{"розблокування"};
+            }
+
+            logger.debug("Loaded ban_keywords: {}", Arrays.toString(banKeywords));
+            logger.debug("Loaded unban_keywords: {}", Arrays.toString(unbanKeywords));
+
             BlockedObjects bo = new BlockedObjects(prop).getBlockedDomainNames();
 
             CGUGetter cguGetter = new CGUGetter(prop);
@@ -103,7 +122,7 @@ public class Cip_gov_ua_getter {
                     logger.warn("Skipping unpublished post: {} - {}", post.getString("date"), title);
                     continue;
                 }
-
+                /*
                 // Перевіряємо, чи пост стосується блокування/обмеження
                 if (!(title.matches(".*блокування.*")
                         || title.matches(".*обмеження доступу.*")
@@ -114,6 +133,29 @@ public class Cip_gov_ua_getter {
 
                 // Визначаємо дію (блокувати чи розблокувати)
                 boolean block = !title.matches(".*розблокування.*") && !title.matches(".*припинення тимчасового.*");
+                 */
+
+                // Перевіряємо, чи пост стосується блокування/обмеження
+                boolean isRelevant = false;
+                for (String keyword : banKeywords) {
+                    if (title.matches(".*" + keyword + ".*")) {
+                        isRelevant = true;
+                        break;
+                    }
+                }
+                if (!isRelevant) {
+                    logger.warn("Skipping unrelated post: {} - {}", post.getString("date"), title);
+                    continue;
+                }
+
+                // Визначаємо дію (блокувати чи розблокувати)
+                boolean block = true;
+                for (String keyword : unbanKeywords) {
+                    if (title.matches(".*" + keyword + ".*")) {
+                        block = false;
+                        break;
+                    }
+                }
 
                 // Обробляємо вкладення
                 JSONArray postAttachments = post.getJSONArray("attachments");

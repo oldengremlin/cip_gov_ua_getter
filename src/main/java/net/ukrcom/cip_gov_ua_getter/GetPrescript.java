@@ -46,6 +46,7 @@ import java.util.Set;
 public class GetPrescript {
 
     private static final Logger logger = LoggerFactory.getLogger(GetPrescript.class);
+    private static final long MAX_FILE_SIZE_BYTES_DEFAULT = 10_485_760; // 10 МБ
 
     protected final String urlPrescript;
     protected String bodyPrescript;
@@ -58,6 +59,7 @@ public class GetPrescript {
     private final String mimeType;
     private final boolean debug;
     private final String[] serviceSubdomains;
+    private final long maxFileSizeBytes;
 
     // Спільний JavaScript-код для AJAX-запиту
     private static final String FETCH_SCRIPT_TEMPLATE = """
@@ -130,6 +132,10 @@ public class GetPrescript {
         if (serviceSubdomains.length == 0) {
             logger.warn("No valid service subdomains defined in SERVICE_SUBDOMAINS");
         }
+        this.maxFileSizeBytes = Long.parseLong(
+                this.prop.getProperty("max_file_size_bytes", String.valueOf(MAX_FILE_SIZE_BYTES_DEFAULT))
+        );
+        logger.debug("Max file size set to {} bytes", this.maxFileSizeBytes);
     }
 
     public GetPrescript getPrescriptFrom() {
@@ -298,6 +304,14 @@ public class GetPrescript {
                 try {
                     String dataUrl = executeAjaxRequest(true);
                     byte[] fileContent = java.util.Base64.getDecoder().decode(dataUrl.split(",")[1]);
+                    if (fileContent.length > maxFileSizeBytes) {
+                        logger.warn("File ID {} is too large: {} bytes, max allowed: {} bytes",
+                                id, fileContent.length, maxFileSizeBytes);
+                        try (FileWriter fw = new FileWriter("failed_ids.txt", true)) {
+                            fw.write("ID: " + id + ", Error: File too large (" + fileContent.length + " bytes, max " + maxFileSizeBytes + " bytes)\n");
+                        }
+                        return this;
+                    }
                     try (FileOutputStream fos = new FileOutputStream(getFileName())) {
                         fos.write(fileContent);
                     }
