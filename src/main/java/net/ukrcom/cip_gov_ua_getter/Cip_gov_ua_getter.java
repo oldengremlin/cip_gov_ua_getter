@@ -105,7 +105,9 @@ public class Cip_gov_ua_getter {
                 }
 
                 // Перевіряємо, чи пост стосується блокування/обмеження
-                if (!(title.matches(".*блокування.*") || title.matches(".*обмеження доступу.*"))) {
+                if (!(title.matches(".*блокування.*")
+                        || title.matches(".*обмеження доступу.*")
+                        || title.matches(".*реалізацію.*обмежувальних.*"))) {
                     logger.warn("Skipping unrelated post: {} - {}", post.getString("date"), title);
                     continue;
                 }
