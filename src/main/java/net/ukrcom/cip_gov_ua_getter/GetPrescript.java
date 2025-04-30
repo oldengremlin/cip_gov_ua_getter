@@ -249,10 +249,12 @@ public class GetPrescript {
                 // Для бінарних файлів (PDF) використовуємо прямий запит
                 APIResponse response = page.request().get(urlPrescript);
                 if (!response.ok()) {
+                    logger.warn("HTTP  {}: {}", response.status(), response.statusText());
                     throw new IOException("HTTP " + response.status() + ": " + response.statusText());
                 }
                 byte[] content = response.body();
                 if (content.length > maxFileSizeBytes) {
+                    logger.warn("File too large: {}  bytes, max allowed: {}", content.length, maxFileSizeBytes);
                     throw new IOException("File too large: " + content.length + " bytes, max allowed: " + maxFileSizeBytes);
                 }
                 return "data:application/octet-stream;base64," + java.util.Base64.getEncoder().encodeToString(content);
