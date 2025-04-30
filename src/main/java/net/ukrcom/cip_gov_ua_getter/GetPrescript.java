@@ -433,22 +433,32 @@ public class GetPrescript {
             this.origFileName = null;
             return this;
         }
-
+        String ext = "";
         String cleanedName = fileName;
         // Перевіряємо довжину в байтах UTF-8
         if (cleanedName.getBytes(StandardCharsets.UTF_8).length > 250) {
             // Витягуємо розширення
             int lastDot = fileName.lastIndexOf('.');
             String namePart = lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
-            String ext = lastDot > 0 ? fileName.substring(lastDot) : "";
+            ext = lastDot > 0 ? fileName.substring(lastDot) : "";
 
             // Обрізаємо основну частину до 240 байт (залишаємо місце для розширення)
             if (namePart.getBytes(StandardCharsets.UTF_8).length > 240) {
                 namePart = trimToUtf8Bytes(namePart, 240);
+                // Обрізати до останнього пробілу
+                int lastSpace = namePart.lastIndexOf(' ');
+                if (lastSpace > 0) {
+                    namePart = namePart.substring(0, lastSpace);
+                }
             }
 
             // Формуємо нове ім’я
-            cleanedName = namePart + ext; // ext уже містить ".", якщо є
+            cleanedName = namePart + (ext.isEmpty() ? "" : "...") + ext;
+        }
+
+        if (cleanedName.matches(".*[\\/:*?\"<>|].*")) {
+            logger.warn("Invalid characters in filename for ID {}: {} : {}", id, fileName, cleanedName);
+            cleanedName = id + "_prescript" + (ext.isEmpty() ? ".unknown" : ext);
         }
 
         this.origFileName = cleanedName;
@@ -470,7 +480,8 @@ public class GetPrescript {
         int endIndex = 0;
 
         for (int i = 0; i < input.length(); i++) {
-            String ch = input.substring(i, i + 1);
+            int codePoint = input.codePointAt(i);
+            String ch = new String(Character.toChars(codePoint));
             int chByteLen = ch.getBytes(StandardCharsets.UTF_8).length;
 
             if (byteCount + chByteLen > maxBytes) {
@@ -479,6 +490,9 @@ public class GetPrescript {
 
             byteCount += chByteLen;
             endIndex = i + 1;
+            if (Character.isHighSurrogate(input.charAt(i))) {
+                i++; // Пропускаємо низьку сурогатну пару
+            }
         }
 
         if (logger.isDebugEnabled()) {
