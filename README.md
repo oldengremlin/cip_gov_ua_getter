@@ -65,21 +65,21 @@
 4. **Створення конфігурації**: Створіть файл `cip.gov.ua.properties` у корені проекту. Приклад:
 
    ```properties
-urlArticles=https://cip.gov.ua/services/cm/api/articles?page=0&size=1000&tagId=60751
-urlPrescript=https://cip.gov.ua/services/cm/api/attachment/download?id=
-blocked=blocked.txt;blocked.ncu
-blocked_result=blocked.result.txt
-store_prescript_to=./PRESCRIPT
-userAgent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36
-secChUa="Chromium";v="129", "Not:A-Brand";v="24", "Google Chrome";v="129"
-urlAggressorServices=https://webportal.nrada.gov.ua/perelik-servisiv-derzhavy-agresora/#perelik
-AggressorServices_SOURCE_DOMAIN=webportal.nrada.gov.ua
-AggressorServices_PRIMARY_PDF_NAME=Perelik.#450.2023.07.06.pdf
-AggressorServices_prescript_to=./PRESCRIPT/MANUAL
-SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test,m
-ban_keywords=блокування|обмеження доступу|реалізацію.*обмежувальних
-unban_keywords=розблокування|припинення тимчасового
-max_file_size_bytes=10485760   
+   urlArticles=https://cip.gov.ua/services/cm/api/articles?page=0&size=1000&tagId=60751
+   urlPrescript=https://cip.gov.ua/services/cm/api/attachment/download?id=
+   blocked=blocked.txt;blocked.ncu
+   blocked_result=blocked.result.txt
+   store_prescript_to=./PRESCRIPT
+   userAgent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36
+   secChUa="Chromium";v="129", "Not:A-Brand";v="24", "Google Chrome";v="129"
+   urlAggressorServices=https://webportal.nrada.gov.ua/perelik-servisiv-derzhavy-agresora/#perelik
+   AggressorServices_SOURCE_DOMAIN=webportal.nrada.gov.ua
+   AggressorServices_PRIMARY_PDF_NAME=Perelik.#450.2023.07.06.pdf
+   AggressorServices_prescript_to=./PRESCRIPT/MANUAL
+   SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test,m
+   ban_keywords=блокування|обмеження доступу|реалізацію.*обмежувальних
+   unban_keywords=розблокування|припинення тимчасового
+   max_file_size_bytes=10485760   
    ```
 
 ## Використання
