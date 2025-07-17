@@ -176,7 +176,7 @@ public class PlaycityParser {
             try (PDDocument document = Loader.loadPDF(file)) {
                 PDFTextStripper stripper = new PDFTextStripper();
                 String text = stripper.getText(document);
-                String cleanedText = text.replaceAll("\n", "").replaceAll("\\d+\\s+\\.http", " http");
+                String cleanedText = text.replaceAll("\n", "").replaceAll("[0-9]+ .http", " http");
                 logger.info("Document: {}", cleanedText);
 
                 String domainPattern = "(?:https?://(?:www\\.)?"
@@ -192,7 +192,6 @@ public class PlaycityParser {
 
                 while (domainMatcher.find()) {
                     String match = domainMatcher.group();
-//                    match = match.replaceAll("\\s+", "").replaceAll("[1-9]?[0-9]+\\.https", "");
                     DomainValidatorUtil.validateDomain(
                             match, serviceSubdomains, sourceDomain, DOMAIN_VALIDATOR, IP_VALIDATOR, SPOOF_CHECKER, logger,
                             true, LocalDateTime.now(), domains);
