@@ -178,8 +178,9 @@ public class PlaycityParser {
                 String text = stripper.getText(document);
                 String cleanedText = text
                         .replaceAll("\n", " ")
-                        .replaceAll("\\s+", " ")
-                        .replaceAll("\\d+\\s*\\.\\s*http", " http");
+                        .replaceAll("\\d+\\s*\\.\\s*http", " http")
+                        .replaceAll("\\s+", " ");
+
                 logger.info("Document: {}", cleanedText);
 
                 String domainPattern = "(?:https?://(?:www\\.)?"
