@@ -181,7 +181,7 @@ public class PlaycityParser {
                         .replaceAll("\\d+\\s*\\.\\s*http", " http")
                         .replaceAll("\\s+", " ");
 
-                logger.info("Document: {}", cleanedText);
+                logger.debug("Document: {}", cleanedText);
 
                 String domainPattern = "(?:https?://(?:www\\.)?"
                         + "(?:[-a-zA-Z0-9@:%._\\+~#=]|[-\\p{L}\\p{M}*]{1,256})"
