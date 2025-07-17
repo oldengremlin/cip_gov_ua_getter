@@ -177,6 +177,7 @@ public class PlaycityParser {
                 PDFTextStripper stripper = new PDFTextStripper();
                 String text = stripper.getText(document);
                 String cleanedText = text.replaceAll("\n", "");
+                cleanedText = cleanedText.replaceAll("\\d+\s*\\.", "");
 
                 String domainPattern = "(?:https?://(?:www\\.)?"
                         + "(?:[-a-zA-Z0-9@:%._\\+~#=]|[-\\p{L}\\p{M}*]{1,256})"
