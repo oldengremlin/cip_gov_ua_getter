@@ -212,6 +212,13 @@ public class Cip_gov_ua_getter {
                 bo.addBlockedDomainName(bd);
             }
 
+            // Parse NKEK.GOV.UA prescripts
+            PlaycityParser parserNkek = new PlaycityParser(prop, debug);
+            Set<BlockedDomain> nkekDomains = parserNkek.parse();
+            for (BlockedDomain bd : nkekDomains) {
+                bo.addBlockedDomainName(bd);
+            }
+
             // Зберігаємо результати
             bo.storeState();
             logger.info("Successfully stored blocked domains state");
