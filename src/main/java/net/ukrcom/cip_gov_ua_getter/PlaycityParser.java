@@ -64,7 +64,6 @@ public class PlaycityParser {
     private final Path manualDir;
     private final boolean debug;
     private final String sourceDomain;
-    private final String primaryPdfName;
     private final String[] serviceSubdomains;
     private final String[] urlPdfs;
 
@@ -80,8 +79,7 @@ public class PlaycityParser {
             logger.error("Failed to create directory {}: {}", this.manualDir, e.getMessage(), e);
             throw new RuntimeException("Cannot create directory: " + this.manualDir, e);
         }
-        this.sourceDomain = properties.getProperty("AggressorServices_SOURCE_DOMAIN", "webportal.nrada.gov.ua");
-        this.primaryPdfName = properties.getProperty("AggressorServices_PRIMARY_PDF_NAME", "Perelik.#450.2023.07.06.pdf");
+        this.sourceDomain = "nkek.gov.ua";
         String subdomains = properties.getProperty("SERVICE_SUBDOMAINS",
                 "www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test,m");
         this.serviceSubdomains = Arrays.stream(subdomains.split(","))
@@ -109,7 +107,20 @@ public class PlaycityParser {
 //        String targetUrl = properties.getProperty("urlAggressorServices");
 
         for (String targetUrl : this.urlPdfs) {
-            System.out.println(targetUrl);
+            if (targetUrl == null || targetUrl.isEmpty()) {
+                continue;
+            }
+            try {
+                disableSSLCertificateVerification();
+//                Path primaryPdfPath = manualDir.resolve(primaryPdfName);
+//                downloadPdf(targetUrl, primaryPdfPath.toString());
+//                logger.info("Successfully downloaded PDF to: {}", primaryPdfPath);
+
+                System.out.println(targetUrl + " : " + targetUrl.replaceAll("[:/]", "-"));
+
+            } catch (Exception e) {
+                logger.error("Error parsing aggressor services: {}", e.getMessage(), e);
+            }
         }
 
 //        if (targetUrl == null || targetUrl.isEmpty()) {
@@ -162,19 +173,18 @@ public class PlaycityParser {
         HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
     }
 
-    private String findPdfUrl(String url) throws IOException {
-        Document doc = Jsoup.connect(url).get();
-        Element pdfLink = doc.select("a[href$=.pdf]").first();
-        if (pdfLink != null) {
-            String pdfUrl = pdfLink.attr("href");
-            if (!pdfUrl.startsWith("http")) {
-                pdfUrl = "https://" + sourceDomain + pdfUrl;
-            }
-            return pdfUrl;
-        }
-        return null;
-    }
-
+//    private String findPdfUrl(String url) throws IOException {
+//        Document doc = Jsoup.connect(url).get();
+//        Element pdfLink = doc.select("a[href$=.pdf]").first();
+//        if (pdfLink != null) {
+//            String pdfUrl = pdfLink.attr("href");
+//            if (!pdfUrl.startsWith("http")) {
+//                pdfUrl = "https://" + sourceDomain + pdfUrl;
+//            }
+//            return pdfUrl;
+//        }
+//        return null;
+//    }
     private void downloadPdf(String pdfUrl, String destinationPath) throws
             IOException {
         Path destPath = Paths.get(destinationPath);
