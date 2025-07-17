@@ -22,9 +22,6 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -115,33 +112,16 @@ public class PlaycityParser {
                 downloadPdf(targetUrl, primaryPdfPath.toString());
                 logger.info("Successfully downloaded PDF from {} to {}", targetUrl, primaryPdfPath);
 
-//                System.out.println(targetUrl + " : " + targetUrl.replaceAll("[:/]", "-"));
+                domains.addAll(extractDomainsFromPDF(primaryPdfPath.toString()));
+                if (debug) {
+                    logger.debug("Extracted {} domains from PDF", domains.size());
+                }
+
             } catch (Exception e) {
                 logger.error("Error parsing aggressor services: {}", e.getMessage(), e);
             }
         }
 
-//        if (targetUrl == null || targetUrl.isEmpty()) {
-//            logger.info("urlAggressorServices not specified in properties, skipping aggressor services parsing");
-//            return domains;
-//        }
-//        try {
-//            disableSSLCertificateVerification();
-//            String pdfUrl = findPdfUrl(targetUrl);
-//            if (pdfUrl != null) {
-//                Path primaryPdfPath = manualDir.resolve(primaryPdfName);
-//                downloadPdf(pdfUrl, primaryPdfPath.toString());
-//                logger.info("Successfully downloaded PDF to: {}", primaryPdfPath);
-//                domains.addAll(extractDomainsFromPDF(primaryPdfPath.toString()));
-//                if (debug) {
-//                    logger.debug("Extracted {} domains from aggressor services PDF", domains.size());
-//                }
-//            } else {
-//                logger.warn("Could not find PDF link on page: {}", targetUrl);
-//            }
-//        } catch (Exception e) {
-//            logger.error("Error parsing aggressor services: {}", e.getMessage(), e);
-//        }
         return domains;
     }
 
@@ -171,18 +151,6 @@ public class PlaycityParser {
         HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
     }
 
-//    private String findPdfUrl(String url) throws IOException {
-//        Document doc = Jsoup.connect(url).get();
-//        Element pdfLink = doc.select("a[href$=.pdf]").first();
-//        if (pdfLink != null) {
-//            String pdfUrl = pdfLink.attr("href");
-//            if (!pdfUrl.startsWith("http")) {
-//                pdfUrl = "https://" + sourceDomain + pdfUrl;
-//            }
-//            return pdfUrl;
-//        }
-//        return null;
-//    }
     private void downloadPdf(String pdfUrl, String destinationPath) throws
             IOException {
         Path destPath = Paths.get(destinationPath);
