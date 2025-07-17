@@ -104,7 +104,6 @@ public class PlaycityParser {
 
     public Set<BlockedDomain> parse() {
         Set<BlockedDomain> domains = new TreeSet<>(new BlockedDomainComparator());
-//        String targetUrl = properties.getProperty("urlAggressorServices");
 
         for (String targetUrl : this.urlPdfs) {
             if (targetUrl == null || targetUrl.isEmpty()) {
@@ -112,12 +111,11 @@ public class PlaycityParser {
             }
             try {
                 disableSSLCertificateVerification();
-//                Path primaryPdfPath = manualDir.resolve(primaryPdfName);
-//                downloadPdf(targetUrl, primaryPdfPath.toString());
-//                logger.info("Successfully downloaded PDF to: {}", primaryPdfPath);
+                Path primaryPdfPath = manualDir.resolve(targetUrl.replaceAll("[:/]", "-"));
+                downloadPdf(targetUrl, primaryPdfPath.toString());
+                logger.info("Successfully downloaded PDF from {} to {}", targetUrl, primaryPdfPath);
 
-                System.out.println(targetUrl + " : " + targetUrl.replaceAll("[:/]", "-"));
-
+//                System.out.println(targetUrl + " : " + targetUrl.replaceAll("[:/]", "-"));
             } catch (Exception e) {
                 logger.error("Error parsing aggressor services: {}", e.getMessage(), e);
             }
