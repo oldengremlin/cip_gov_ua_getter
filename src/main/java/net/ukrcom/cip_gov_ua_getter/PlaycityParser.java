@@ -191,7 +191,7 @@ public class PlaycityParser {
 
                 while (domainMatcher.find()) {
                     String match = domainMatcher.group();
-                    match = match.replaceAll("[1-9]?[0-9]\\.https$", "");
+                    match = match.replaceAll("\\s+", "").replaceAll("[1-9]?[0-9]+\\.https", "");
                     DomainValidatorUtil.validateDomain(
                             match, serviceSubdomains, sourceDomain, DOMAIN_VALIDATOR, IP_VALIDATOR, SPOOF_CHECKER, logger,
                             true, LocalDateTime.now(), domains);
