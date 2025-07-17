@@ -51,19 +51,19 @@ import java.util.regex.Pattern;
  * @author olden
  */
 public class PlaycityParser {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(PlaycityParser.class);
     private static final DomainValidator DOMAIN_VALIDATOR = DomainValidator.getInstance(true);
     private static final InetAddressValidator IP_VALIDATOR = InetAddressValidator.getInstance();
     private static final SpoofChecker SPOOF_CHECKER = new SpoofChecker.Builder().build();
-    
+
     private final Properties properties;
     private final Path manualDir;
     private final boolean debug;
     private final String sourceDomain;
     private final String[] serviceSubdomains;
     private final String[] urlPdfs;
-    
+
     public PlaycityParser(Properties properties, boolean debug) {
         this.properties = properties;
         this.debug = debug;
@@ -98,10 +98,10 @@ public class PlaycityParser {
                 .filter(s -> !s.isEmpty())
                 .toArray(String[]::new);
     }
-    
+
     public Set<BlockedDomain> parse() {
         Set<BlockedDomain> domains = new TreeSet<>(new BlockedDomainComparator());
-        
+
         for (String targetUrl : this.urlPdfs) {
             if (targetUrl == null || targetUrl.isEmpty()) {
                 continue;
@@ -111,20 +111,20 @@ public class PlaycityParser {
                 Path primaryPdfPath = manualDir.resolve(targetUrl.replaceAll("[:/]", "-"));
                 downloadPdf(targetUrl, primaryPdfPath.toString());
                 logger.info("Successfully downloaded PDF from {} to {}", targetUrl, primaryPdfPath);
-                
+
                 domains.addAll(extractDomainsFromPDF(primaryPdfPath.toString()));
                 if (debug) {
                     logger.debug("Extracted {} domains from PDF", domains.size());
                 }
-                
+
             } catch (Exception e) {
                 logger.error("Error parsing aggressor services: {}", e.getMessage(), e);
             }
         }
-        
+
         return domains;
     }
-    
+
     private void disableSSLCertificateVerification() throws Exception {
         TrustManager[] trustAllCerts = new TrustManager[]{
             new X509TrustManager() {
@@ -132,25 +132,25 @@ public class PlaycityParser {
                 public X509Certificate[] getAcceptedIssuers() {
                     return null;
                 }
-                
+
                 @Override
                 public void checkClientTrusted(X509Certificate[] certs, String authType) {
                 }
-                
+
                 @Override
                 public void checkServerTrusted(X509Certificate[] certs, String authType) {
                 }
             }
         };
-        
+
         SSLContext sc = SSLContext.getInstance("SSL");
         sc.init(null, trustAllCerts, new SecureRandom());
         HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
-        
+
         HostnameVerifier allHostsValid = (hostname, session) -> true;
         HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
     }
-    
+
     private void downloadPdf(String pdfUrl, String destinationPath) throws
             IOException {
         Path destPath = Paths.get(destinationPath);
@@ -167,18 +167,17 @@ public class PlaycityParser {
         }
         logger.debug("Downloaded PDF to: {}", destPath);
     }
-    
+
     private Set<BlockedDomain> extractDomainsFromPDF(String filePath) {
         Set<BlockedDomain> domains = new TreeSet<>(new BlockedDomainComparator());
-        
+
         try {
             File file = new File(filePath);
             try (PDDocument document = Loader.loadPDF(file)) {
                 PDFTextStripper stripper = new PDFTextStripper();
                 String text = stripper.getText(document);
-                String cleanedText = text.replaceAll("\n", "");
+                String cleanedText = text.replaceAll("\n", "").replaceAll("\\d+\\s+\\.http", " http");
                 logger.info("Document: {}", cleanedText);
-                //cleanedText = cleanedText.replaceAll("\\d+\\s+\\.", "");
 
                 String domainPattern = "(?:https?://(?:www\\.)?"
                         + "(?:[-a-zA-Z0-9@:%._\\+~#=]|[-\\p{L}\\p{M}*]{1,256})"
@@ -190,21 +189,21 @@ public class PlaycityParser {
                         + "(?:\\/[-a-zA-Z0-9@:%_\\+.~#?&//=]*)?\\b)";
                 Pattern domainRegex = Pattern.compile(domainPattern);
                 Matcher domainMatcher = domainRegex.matcher(cleanedText);
-                
+
                 while (domainMatcher.find()) {
                     String match = domainMatcher.group();
-                    match = match.replaceAll("\\s+", "").replaceAll("[1-9]?[0-9]+\\.https", "");
+//                    match = match.replaceAll("\\s+", "").replaceAll("[1-9]?[0-9]+\\.https", "");
                     DomainValidatorUtil.validateDomain(
                             match, serviceSubdomains, sourceDomain, DOMAIN_VALIDATOR, IP_VALIDATOR, SPOOF_CHECKER, logger,
                             true, LocalDateTime.now(), domains);
-                    
+
                 }
             }
         } catch (IOException e) {
             logger.error("Error processing PDF file {}: {}", filePath, e.getMessage(), e);
         }
-        
+
         return domains;
     }
-    
+
 }
