@@ -50,9 +50,9 @@ import java.util.regex.Pattern;
  *
  * @author olden
  */
-public abstract class PDFParser {
+public abstract class AbstractPDFParser {
 
-    protected static final Logger logger = LoggerFactory.getLogger(PDFParser.class);
+    protected static final Logger logger = LoggerFactory.getLogger(AbstractPDFParser.class);
     private static final DomainValidator DOMAIN_VALIDATOR = DomainValidator.getInstance(true);
     private static final InetAddressValidator IP_VALIDATOR = InetAddressValidator.getInstance();
     private static final SpoofChecker SPOOF_CHECKER = new SpoofChecker.Builder().build();
@@ -63,7 +63,7 @@ public abstract class PDFParser {
     protected String sourceDomain;
     protected String[] serviceSubdomains;
 
-    public PDFParser(Properties properties, boolean debug) {
+    public AbstractPDFParser(Properties properties, boolean debug) {
         this.properties = properties;
         this.debug = debug;
         String manualDirStr = properties.getProperty("AggressorServices_prescript_to", "./PRESCRIPT").trim();

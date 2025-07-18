@@ -26,7 +26,7 @@ import java.util.TreeSet;
  *
  * @author olden
  */
-public class PlaycityParser extends PDFParser {
+public class PlaycityParser extends AbstractPDFParser {
 
     private final String[] urlPdfs;
 

@@ -29,7 +29,7 @@ import java.util.TreeSet;
  *
  * @author olden
  */
-public class AggressorServicesParser extends PDFParser {
+public class AggressorServicesParser extends AbstractPDFParser {
 
     private final String primaryPdfName;
 
