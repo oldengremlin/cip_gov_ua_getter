@@ -17,6 +17,7 @@ package net.ukrcom.cip_gov_ua_getter;
 
 import com.ibm.icu.text.SpoofChecker;
 import com.microsoft.playwright.*;
+import com.microsoft.playwright.options.LoadState;
 import org.apache.commons.validator.routines.DomainValidator;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.slf4j.Logger;
@@ -37,7 +38,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.logging.Level;
 
 /**
  * Клас зчитує перелік доменів з відповідних text/plain файлів у розпорядженнях.
@@ -150,7 +150,7 @@ public class GetPrescript {
                 this.bodyPrescript = readLocalPrescript();
             } else if (mimeType.equalsIgnoreCase("text/plain")) {
                 logger.info("Fetching prescript for ID {} from server", id);
-                this.bodyPrescript = fetchPrescriptWithRetry(this.prop, 3);
+                this.bodyPrescript = fetchPrescriptWithRetry(this.prop, 5);
                 this.localRead = false;
             } else {
                 logger.debug("Skipping fetch for non-text/plain file ID {}: no local file", id);
@@ -163,20 +163,23 @@ public class GetPrescript {
         return this;
     }
 
-    private String executeAjaxRequest(boolean returnAsDataUrl) throws IOException {
-        try (Playwright playwright = Playwright.create(); Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
-                .setHeadless(true)
-                .setChannel("chrome")); BrowserContext context = browser.newContext(new Browser.NewContextOptions()
-                .setUserAgent(this.userAgent)
-                .setLocale("uk-UA")
-                .setExtraHTTPHeaders(Map.of(
-                        "Accept", "text/plain, */*",
-                        "Accept-Language", "uk,en-US;q=0.9,en;q=0.8,ru;q=0.7",
-                        "Sec-Ch-Ua", this.secChUa,
-                        "Sec-Fetch-Dest", "empty",
-                        "Sec-Fetch-Mode", "cors",
-                        "Sec-Fetch-Site", "same-origin"
-                ))); Page page = context.newPage()) {
+    private String executeAjaxRequest(boolean returnAsDataUrl) throws
+            IOException {
+        try (Playwright playwright = Playwright.create();
+             Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
+                     .setHeadless(true)
+                     .setChannel("chrome"));
+             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+                     .setUserAgent(this.userAgent)
+                     .setLocale("uk-UA")
+                     .setExtraHTTPHeaders(Map.of(
+                             "Accept", "text/plain, */*",
+                             "Accept-Language", "uk,en-US;q=0.9,en;q=0.8,ru;q=0.7",
+                             "Sec-Ch-Ua", this.secChUa,
+                             "Sec-Fetch-Dest", "empty",
+                             "Sec-Fetch-Mode", "cors",
+                             "Sec-Fetch-Site", "same-origin"
+                     ))); Page page = context.newPage()) {
 
             // Блокуємо запити до Google Analytics і Google Tag Manager
             page.route("**/*google-analytics.com/**", route -> {
@@ -219,8 +222,11 @@ public class GetPrescript {
 
             // Ініціалізація сесії
             logger.debug("Navigating to base URL: {}", baseUrl);
-            page.navigate(baseUrl);
-            page.waitForLoadState();
+            //page.navigate(baseUrl);
+            //page.waitForLoadState();
+            page.navigate(baseUrl, new Page.NavigateOptions().setTimeout(30000));  // 30с тайм-аут
+            page.waitForLoadState(LoadState.LOAD, new Page.WaitForLoadStateOptions().setTimeout(30000));  // Тайм-аут для wait
+
             /*
             // Формуємо JavaScript-скрипт
             String script = returnAsDataUrl
@@ -244,7 +250,6 @@ public class GetPrescript {
 
             return (String) page.evaluate(script);
              */
-
             if (returnAsDataUrl) {
                 logger.debug("executeAjaxRequest: {} is binary: {}", urlPrescript, returnAsDataUrl);
                 // Для бінарних файлів (PDF) використовуємо прямий запит
@@ -293,13 +298,14 @@ public class GetPrescript {
         return Files.readString(file.toPath(), StandardCharsets.UTF_8);
     }
 
-    private String fetchPrescriptWithRetry(Properties p, int maxRetries) throws IOException {
+    private String fetchPrescriptWithRetry(Properties p, int maxRetries) throws
+            IOException {
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 String result = executeAjaxRequest(false);
                 logger.info("Successfully fetched prescript ID {} on attempt {}", this.id, attempt);
                 return result;
-            } catch (Exception e) {
+            } catch (IOException e) {
                 logger.warn("Attempt {} failed for ID {}: {}", attempt, this.id, e.getMessage());
                 if (attempt == maxRetries) {
                     logger.error("Failed to fetch prescript ID {} after {} attempts: {}", this.id, maxRetries, e.getMessage());
@@ -309,7 +315,7 @@ public class GetPrescript {
                     throw new IOException("Failed to fetch prescript after " + maxRetries + " attempts: " + e.getMessage(), e);
                 }
                 try {
-                    Thread.sleep(1000 + (long) (Math.random() * 1000));
+                    Thread.sleep(1000 + (long) (Math.random() * 5000));
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                 }

@@ -15,7 +15,6 @@
  */
 package net.ukrcom.cip_gov_ua_getter;
 
-import java.time.ZoneOffset;
 import java.util.Comparator;
 
 /**
