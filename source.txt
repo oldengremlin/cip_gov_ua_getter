@@ -1078,6 +1078,7 @@ public class GetPrescript {
             IOException {
         try (Playwright playwright = Playwright.create();
              Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
+                     .setArgs(Arrays.asList("--no-sandbox", "--disable-setuid-sandbox"))
                      .setHeadless(true)
                      .setChannel("chrome"));
              BrowserContext context = browser.newContext(new Browser.NewContextOptions()
@@ -1206,7 +1207,7 @@ public class GetPrescript {
                 String result = executeAjaxRequest(false);
                 logger.info("Successfully fetched prescript ID {} on attempt {}", this.id, attempt);
                 return result;
-            } catch (Exception e) {
+            } catch (IOException e) {
                 logger.warn("Attempt {} failed for ID {}: {}", attempt, this.id, e.getMessage());
                 if (attempt == maxRetries) {
                     logger.error("Failed to fetch prescript ID {} after {} attempts: {}", this.id, maxRetries, e.getMessage());
