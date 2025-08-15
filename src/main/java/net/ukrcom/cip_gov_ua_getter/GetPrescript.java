@@ -45,7 +45,7 @@ import java.util.Set;
  * @author olden
  */
 public class GetPrescript {
-
+    
     private static final Logger logger = LoggerFactory.getLogger(GetPrescript.class);
     private static final long MAX_FILE_SIZE_BYTES_DEFAULT = 15_728_640; // 15 МБ
 
@@ -82,14 +82,14 @@ public class GetPrescript {
     // SpoofChecker для обробки гомогліфів
     private static final SpoofChecker SPOOF_CHECKER;
     private boolean localRead;
-
+    
     static {
         SpoofChecker.Builder builder = new SpoofChecker.Builder();
         builder.setChecks(SpoofChecker.CONFUSABLE);
         SPOOF_CHECKER = builder.build();
         logger.debug("SpoofChecker initialized for confusables");
     }
-
+    
     public GetPrescript(Properties p, String i, String mt) throws IOException {
         this.localRead = true;
         this.prop = p;
@@ -138,7 +138,7 @@ public class GetPrescript {
         );
         logger.debug("Max file size set to {} bytes", this.maxFileSizeBytes);
     }
-
+    
     public GetPrescript getPrescriptFrom() {
         try {
             if (isExists(getFileName())) {
@@ -162,11 +162,12 @@ public class GetPrescript {
         }
         return this;
     }
-
+    
     private String executeAjaxRequest(boolean returnAsDataUrl) throws
             IOException {
         try (Playwright playwright = Playwright.create();
              Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
+                     .setArgs(Arrays.asList("--no-sandbox", "--disable-setuid-sandbox"))
                      .setHeadless(true)
                      .setChannel("chrome"));
              BrowserContext context = browser.newContext(new Browser.NewContextOptions()
@@ -289,15 +290,15 @@ public class GetPrescript {
                     """.formatted(urlPrescript, secChUa);
                 return (String) page.evaluate(script);
             }
-
+            
         }
     }
-
+    
     private String readLocalPrescript() throws IOException {
         File file = new File(getFileName());
         return Files.readString(file.toPath(), StandardCharsets.UTF_8);
     }
-
+    
     private String fetchPrescriptWithRetry(Properties p, int maxRetries) throws
             IOException {
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -323,7 +324,7 @@ public class GetPrescript {
         }
         throw new IOException("Failed to fetch prescript: no attempts succeeded");
     }
-
+    
     public String[] getBodyPrescript() {
         if (bodyPrescript == null || bodyPrescript.length() > 10_000_000) {
             logger.warn("Prescript ID {} is too large ({} bytes) or null, skipping", id, bodyPrescript != null ? bodyPrescript.length() : 0);
@@ -332,16 +333,16 @@ public class GetPrescript {
         DomainValidator domainValidator = DomainValidator.getInstance(true);
         InetAddressValidator ipValidator = InetAddressValidator.getInstance();
         Set<String> validDomains = new HashSet<>();
-
+        
         for (String s : this.bodyPrescript.split("\n")) {
             validDomains.addAll(DomainValidatorUtil.validateDomain(
                     s, serviceSubdomains, null, domainValidator, ipValidator, SPOOF_CHECKER, logger,
                     false, null, null));
         }
-
+        
         return validDomains.toArray(String[]::new);
     }
-
+    
     public GetPrescript storePrescriptTo() {
         if (isExists(getFileName())) {
             logger.debug("Skipping store for ID {}: file already exists or origFileName not set", id);
@@ -374,7 +375,7 @@ public class GetPrescript {
             }
             return this;
         }
-
+        
         if (this.mkDir()) {
             for (int attempt = 1; attempt <= 3; attempt++) {
                 try {
@@ -417,7 +418,7 @@ public class GetPrescript {
         }
         return this;
     }
-
+    
     protected boolean mkDir() {
         try {
             Files.createDirectories(storePrescriptTo);
@@ -427,13 +428,13 @@ public class GetPrescript {
             return false;
         }
     }
-
+    
     protected boolean isExists(String fn) {
         File f = new File(fn);
         logger.debug("isExists ⮕ ({}, {})", f.exists(), f.canRead());
         return f.exists() && f.canRead();
     }
-
+    
     public GetPrescript setOrigFileName(String fileName) {
         if (fileName == null) {
             this.origFileName = null;
@@ -461,69 +462,69 @@ public class GetPrescript {
             // Формуємо нове ім’я
             cleanedName = namePart + (ext.isEmpty() ? "" : "...") + ext;
         }
-
+        
         if (cleanedName.matches(".*[\\/:*?\"<>|].*")) {
             logger.warn("Invalid characters in filename for ID {}: {} : {}", id, fileName, cleanedName);
             cleanedName = id + "_prescript" + (ext.isEmpty() ? ".unknown" : ext);
         }
-
+        
         if (cleanedName.getBytes(StandardCharsets.UTF_8).length > 255) {
             logger.warn("Cleaned filename still too long for ID {}: {}, trimming further", id, cleanedName);
             cleanedName = trimToUtf8Bytes(cleanedName, 255);
         }
-
+        
         this.origFileName = cleanedName;
         logger.debug("Cleaned origFileName to {} for ID {}", this.origFileName, id);
         return this;
     }
-
+    
     public static String trimToUtf8Bytes(String input, int maxBytes) {
         if (input == null) {
             return null;
         }
-
+        
         byte[] utf8 = input.getBytes(StandardCharsets.UTF_8);
         if (utf8.length <= maxBytes) {
             return input;
         }
-
+        
         int byteCount = 0;
         int endIndex = 0;
-
+        
         for (int i = 0; i < input.length(); i++) {
             int codePoint = input.codePointAt(i);
             String ch = new String(Character.toChars(codePoint));
             int chByteLen = ch.getBytes(StandardCharsets.UTF_8).length;
-
+            
             if (byteCount + chByteLen > maxBytes) {
                 break;
             }
-
+            
             byteCount += chByteLen;
             endIndex = i + 1;
             if (Character.isHighSurrogate(input.charAt(i))) {
                 i++; // Пропускаємо низьку сурогатну пару
             }
         }
-
+        
         if (logger.isDebugEnabled()) {
             logger.debug("Trimmed inString \"{}\" from {} to {} bytes ({} to {} chars)", input, utf8.length, byteCount, input.length(), endIndex);
         }
-
+        
         return input.substring(0, endIndex);
     }
-
+    
     public String getOrigFileName() {
         return this.origFileName;
     }
-
+    
     public String getFileName() {
         Path filePath = storePrescriptTo.resolve(this.id + "~" + (origFileName != null ? origFileName : this.id + "_prescript.txt"));
         String fileName = filePath.toString();
         logger.debug("getFileName ⮕ {} ⮕ {}", fileName, isExists(fileName));
         return fileName;
     }
-
+    
     public boolean isLocalRead() {
         return this.localRead;
     }
