@@ -48,7 +48,6 @@ public class PlaycityParser extends AbstractPDFParser {
                 continue;
             }
             try {
-                disableSSLCertificateVerification();
                 Path primaryPdfPath = manualDir.resolve(targetUrl.replaceAll("[:/]", "-"));
                 downloadPdf(targetUrl, primaryPdfPath.toString());
                 logger.info("Successfully downloaded PDF from {} to {}", targetUrl, primaryPdfPath);
