@@ -166,9 +166,7 @@ public abstract class AbstractPDFParser {
             httpsConn.setHostnameVerifier((hostname, session) -> true);
         }
 
-        try (InputStream in = connection.getInputStream();
-             ReadableByteChannel rbc = Channels.newChannel(in);
-             FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
+        try (InputStream in = connection.getInputStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
         }
     }
