@@ -51,7 +51,7 @@ public class AggressorServicesParser extends AbstractPDFParser {
         }
 
         try {
-            String pdfUrl = pdfUrl = findPdfUrl(targetUrl);
+            String pdfUrl = findPdfUrl(targetUrl);
             if (pdfUrl != null) {
                 Path primaryPdfPath = manualDir.resolve(primaryPdfName);
                 downloadPdf(pdfUrl, primaryPdfPath.toString());
