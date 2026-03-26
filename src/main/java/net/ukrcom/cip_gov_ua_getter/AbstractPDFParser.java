@@ -17,17 +17,9 @@ package net.ukrcom.cip_gov_ua_getter;
 
 import com.ibm.icu.text.SpoofChecker;
 import java.io.File;
-import org.apache.commons.validator.routines.DomainValidator;
-import org.apache.commons.validator.routines.InetAddressValidator;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -37,23 +29,30 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.cert.X509Certificate;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.security.cert.X509Certificate;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLSocketFactory;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Properties;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Set;
+import java.util.TreeSet;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import org.apache.commons.validator.routines.DomainValidator;
+import org.apache.commons.validator.routines.InetAddressValidator;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Парсер для отримання списку доменів із сервісів держави-агресора.
@@ -162,8 +161,10 @@ public abstract class AbstractPDFParser {
             httpsConn.setSSLSocketFactory(sslSocketFactory);
             httpsConn.setHostnameVerifier((hostname, session) -> true);
         }
-        URL url = new URI(pdfUrl).toURL();
-        try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
+
+        try (InputStream in = connection.getInputStream();
+             ReadableByteChannel rbc = Channels.newChannel(in);
+             FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
         }
     }
