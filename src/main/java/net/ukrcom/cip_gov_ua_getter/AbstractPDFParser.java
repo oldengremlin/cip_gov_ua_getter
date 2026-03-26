@@ -136,7 +136,7 @@ public abstract class AbstractPDFParser {
         }
     }
 
-    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException, URISyntaxException {
+    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException {
 
         Path destPath = Paths.get(destinationPath);
         if (Files.exists(destPath)) {
@@ -153,8 +153,13 @@ public abstract class AbstractPDFParser {
         logger.debug("Downloaded PDF to: {}", destPath);
     }
 
-    private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException, URISyntaxException {
-        URLConnection connection = new URI(pdfUrl).toURL().openConnection();
+    private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException {
+        URLConnection connection;
+        try {
+            connection = new URI(pdfUrl).toURL().openConnection();
+        } catch (URISyntaxException e) {
+            throw new IOException("Invalid PDF URL: " + pdfUrl, e);
+        }
         if (sslSocketFactory != null && connection instanceof HttpsURLConnection) {
             HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
             httpsConn.setSSLSocketFactory(sslSocketFactory);
