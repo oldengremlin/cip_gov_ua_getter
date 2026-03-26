@@ -29,6 +29,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
@@ -126,26 +127,19 @@ public abstract class AbstractPDFParser {
         HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
     }
 
-    protected void downloadPdf(String pdfUrl, String destinationPath) throws
-            IOException, Exception {
+    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException, URISyntaxException {
 
-        try {
-            Path destPath = Paths.get(destinationPath);
-            if (Files.exists(destPath)) {
-                logger.debug("PDF already exists: {}", destPath);
-                return;
-            }
-            Files.createDirectories(destPath.getParent());
-            URL url = new URI(pdfUrl).toURL();
-            try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
-                fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
-            }
-            logger.debug("Downloaded PDF to: {}", destPath);
-        } catch (Exception ex) {
-            disableSSLCertificateVerification();
-            downloadPdf(pdfUrl, destinationPath);
+        Path destPath = Paths.get(destinationPath);
+        if (Files.exists(destPath)) {
+            logger.debug("PDF already exists: {}", destPath);
+            return;
         }
-
+        Files.createDirectories(destPath.getParent());
+        URL url = new URI(pdfUrl).toURL();
+        try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
+            fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+        }
+        logger.debug("Downloaded PDF to: {}", destPath);
     }
 
     public String prepareDocument(String text) {

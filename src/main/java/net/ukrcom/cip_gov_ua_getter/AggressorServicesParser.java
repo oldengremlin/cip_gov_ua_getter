@@ -69,8 +69,14 @@ public class AggressorServicesParser extends AbstractPDFParser {
         return domains;
     }
 
-    private String findPdfUrl(String url) throws IOException {
-        Document doc = Jsoup.connect(url).get();
+    private String findPdfUrl(String url) throws IOException, Exception {
+        Document doc;
+        try {
+            doc = Jsoup.connect(url).get();
+        } catch (Exception ex) {
+            disableSSLCertificateVerification();
+            doc = Jsoup.connect(url).get();
+        }
         Element pdfLink = doc.select("a[href$=.pdf]").first();
         if (pdfLink != null) {
             String pdfUrl = pdfLink.attr("href");
