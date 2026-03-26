@@ -381,7 +381,12 @@ public class GetPrescript {
                 try {
                     String dataUrl = executeAjaxRequest(true);
                     logger.debug("dataUrl length: {}", dataUrl.length());
-                    byte[] fileContent = java.util.Base64.getDecoder().decode(dataUrl.split(",")[1]);
+                    String[] dataParts = dataUrl.split(",", 2);
+                    if (dataParts.length < 2 || dataParts[1].isEmpty()) {
+                        throw new IOException("Unexpected dataUrl format for ID " + id
+                                + ": missing base64 payload (dataUrl length=" + dataUrl.length() + ")");
+                    }
+                    byte[] fileContent = java.util.Base64.getDecoder().decode(dataParts[1]);
                     logger.debug("fileContent length: {}", fileContent.length);
                     if (fileContent.length > maxFileSizeBytes) {
                         logger.debug("File ID {} is too large: {} bytes, max allowed: {} bytes",
