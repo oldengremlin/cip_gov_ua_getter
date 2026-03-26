@@ -22,7 +22,6 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.net.URLConnection;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
@@ -155,16 +154,14 @@ public abstract class AbstractPDFParser {
     }
 
     private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException, URISyntaxException {
-        URLConnection connection = new URL(pdfUrl).openConnection();
+        URLConnection connection = new URI(pdfUrl).toURL().openConnection();
         if (sslSocketFactory != null && connection instanceof HttpsURLConnection) {
             HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
             httpsConn.setSSLSocketFactory(sslSocketFactory);
             httpsConn.setHostnameVerifier((hostname, session) -> true);
         }
 
-        try (InputStream in = connection.getInputStream();
-             ReadableByteChannel rbc = Channels.newChannel(in);
-             FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
+        try (InputStream in = connection.getInputStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
         }
     }
