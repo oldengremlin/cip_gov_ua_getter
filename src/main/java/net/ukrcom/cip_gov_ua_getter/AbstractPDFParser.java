@@ -17,17 +17,11 @@ package net.ukrcom.cip_gov_ua_getter;
 
 import com.ibm.icu.text.SpoofChecker;
 import java.io.File;
-import org.apache.commons.validator.routines.DomainValidator;
-import org.apache.commons.validator.routines.InetAddressValidator;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.channels.Channels;
@@ -35,14 +29,30 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.Set;
+import java.util.TreeSet;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import org.apache.commons.validator.routines.DomainValidator;
+import org.apache.commons.validator.routines.InetAddressValidator;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Парсер для отримання списку доменів із сервісів держави-агресора.
@@ -97,25 +107,37 @@ public abstract class AbstractPDFParser {
     /**
      * Створює SSLSocketFactory, що довіряє будь-якому сертифікату.
      * Використовується лише per-connection — глобальний стан JVM не змінюється.
+     *
+     * @return
      */
     protected SSLSocketFactory createTrustAllSslSocketFactory() {
         try {
-            TrustManager[] trustAll = new TrustManager[]{
+            TrustManager[] trustAll;
+            trustAll = new TrustManager[]{
                 new X509TrustManager() {
-                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                    public void checkClientTrusted(X509Certificate[] c, String a) {}
-                    public void checkServerTrusted(X509Certificate[] c, String a) {}
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
+                    }
+
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] c, String a) {
+                    }
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] c, String a) {
+                    }
                 }
             };
             SSLContext sc = SSLContext.getInstance("TLS");
             sc.init(null, trustAll, new SecureRandom());
             return sc.getSocketFactory();
-        } catch (Exception e) {
+        } catch (KeyManagementException | NoSuchAlgorithmException e) {
             throw new RuntimeException("Failed to create trust-all SSL socket factory", e);
         }
     }
 
-    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException {
+    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException, URISyntaxException {
 
         Path destPath = Paths.get(destinationPath);
         if (Files.exists(destPath)) {
@@ -132,13 +154,14 @@ public abstract class AbstractPDFParser {
         logger.debug("Downloaded PDF to: {}", destPath);
     }
 
-    private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException {
+    private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException, URISyntaxException {
         URLConnection connection = new URL(pdfUrl).openConnection();
         if (sslSocketFactory != null && connection instanceof HttpsURLConnection) {
             HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
             httpsConn.setSSLSocketFactory(sslSocketFactory);
             httpsConn.setHostnameVerifier((hostname, session) -> true);
         }
+
         try (InputStream in = connection.getInputStream();
              ReadableByteChannel rbc = Channels.newChannel(in);
              FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
