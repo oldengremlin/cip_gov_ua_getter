@@ -31,6 +31,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
@@ -38,6 +39,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Properties;
@@ -101,33 +110,28 @@ public abstract class AbstractPDFParser {
 
     abstract public Set<BlockedDomain> parse();
 
-    protected void disableSSLCertificateVerification() throws Exception {
-        TrustManager[] trustAllCerts = new TrustManager[]{
-            new X509TrustManager() {
-                @Override
-                public X509Certificate[] getAcceptedIssuers() {
-                    return null;
+    /**
+     * Створює SSLSocketFactory, що довіряє будь-якому сертифікату.
+     * Використовується лише per-connection — глобальний стан JVM не змінюється.
+     */
+    protected SSLSocketFactory createTrustAllSslSocketFactory() {
+        try {
+            TrustManager[] trustAll = new TrustManager[]{
+                new X509TrustManager() {
+                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                    public void checkClientTrusted(X509Certificate[] c, String a) {}
+                    public void checkServerTrusted(X509Certificate[] c, String a) {}
                 }
-
-                @Override
-                public void checkClientTrusted(X509Certificate[] certs, String authType) {
-                }
-
-                @Override
-                public void checkServerTrusted(X509Certificate[] certs, String authType) {
-                }
-            }
-        };
-
-        SSLContext sc = SSLContext.getInstance("SSL");
-        sc.init(null, trustAllCerts, new SecureRandom());
-        HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
-
-        HostnameVerifier allHostsValid = (hostname, session) -> true;
-        HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
+            };
+            SSLContext sc = SSLContext.getInstance("TLS");
+            sc.init(null, trustAll, new SecureRandom());
+            return sc.getSocketFactory();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create trust-all SSL socket factory", e);
+        }
     }
 
-    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException, URISyntaxException {
+    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException {
 
         Path destPath = Paths.get(destinationPath);
         if (Files.exists(destPath)) {
@@ -135,11 +139,27 @@ public abstract class AbstractPDFParser {
             return;
         }
         Files.createDirectories(destPath.getParent());
-        URL url = new URI(pdfUrl).toURL();
-        try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
-            fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+        try {
+            downloadViaConnection(pdfUrl, destPath, null);
+        } catch (SSLException e) {
+            logger.warn("SSL verification failed for {}, retrying with per-connection SSL bypass: {}", pdfUrl, e.getMessage());
+            downloadViaConnection(pdfUrl, destPath, createTrustAllSslSocketFactory());
         }
         logger.debug("Downloaded PDF to: {}", destPath);
+    }
+
+    private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException {
+        URLConnection connection = new URL(pdfUrl).openConnection();
+        if (sslSocketFactory != null && connection instanceof HttpsURLConnection) {
+            HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
+            httpsConn.setSSLSocketFactory(sslSocketFactory);
+            httpsConn.setHostnameVerifier((hostname, session) -> true);
+        }
+        URL url = new URI(pdfUrl).toURL();
+        try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
+
+            fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+        }
     }
 
     public String prepareDocument(String text) {
