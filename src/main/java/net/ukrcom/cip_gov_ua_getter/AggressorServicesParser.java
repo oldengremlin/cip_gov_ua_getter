@@ -77,6 +77,7 @@ public class AggressorServicesParser extends AbstractPDFParser {
             disableSSLCertificateVerification();
             doc = Jsoup.connect(url).get();
         }
+
         Element pdfLink = doc.select("a[href$=.pdf]").first();
         if (pdfLink != null) {
             String pdfUrl = pdfLink.attr("href");
