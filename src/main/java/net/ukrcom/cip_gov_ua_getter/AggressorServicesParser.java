@@ -51,7 +51,7 @@ public class AggressorServicesParser extends AbstractPDFParser {
         }
 
         try {
-            String pdfUrl = findPdfUrl(targetUrl);
+            String pdfUrl = pdfUrl = findPdfUrl(targetUrl);
             if (pdfUrl != null) {
                 Path primaryPdfPath = manualDir.resolve(primaryPdfName);
                 downloadPdf(pdfUrl, primaryPdfPath.toString());
@@ -80,6 +80,7 @@ public class AggressorServicesParser extends AbstractPDFParser {
                     .sslSocketFactory(createTrustAllSslSocketFactory())
                     .get();
         }
+
         Element pdfLink = doc.select("a[href$=.pdf]").first();
         if (pdfLink != null) {
             String pdfUrl = pdfLink.attr("href");
