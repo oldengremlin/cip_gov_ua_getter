@@ -50,7 +50,6 @@ public class AggressorServicesParser extends AbstractPDFParser {
         }
 
         try {
-            disableSSLCertificateVerification();
             String pdfUrl = findPdfUrl(targetUrl);
             if (pdfUrl != null) {
                 Path primaryPdfPath = manualDir.resolve(primaryPdfName);

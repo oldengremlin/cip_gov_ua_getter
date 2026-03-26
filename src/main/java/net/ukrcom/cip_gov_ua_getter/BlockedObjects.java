@@ -11,8 +11,11 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.IDN;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 import java.util.TreeSet;
 import org.apache.commons.validator.routines.DomainValidator;
@@ -143,15 +146,23 @@ public class BlockedObjects {
             }
         }
 
+        Path targetPath = Paths.get(this.blockedResultName.trim());
+        Path tempPath = targetPath.resolveSibling(targetPath.getFileName() + ".tmp");
         try (PrintWriter pw = new PrintWriter(
                 new OutputStreamWriter(
-                        new FileOutputStream(this.blockedResultName.trim()),
+                        new FileOutputStream(tempPath.toFile()),
                         "UTF-8"))) {
-            logger.info("Writing blocked domains to {}", this.blockedResultName);
+            logger.info("Writing blocked domains to {}", tempPath);
             for (String s : blockedDomainsResultList) {
                 pw.println(s);
             }
             pw.flush();
+        }
+        try {
+            Files.move(tempPath, targetPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            logger.warn("Atomic move not supported, falling back to regular move: {}", e.getMessage());
+            Files.move(tempPath, targetPath, StandardCopyOption.REPLACE_EXISTING);
         }
         logger.info("Successfully stored blocked domains to {}", this.blockedResultName);
         return this;
