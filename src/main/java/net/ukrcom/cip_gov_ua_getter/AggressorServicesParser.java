@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
+import javax.net.ssl.SSLException;
 
 /**
  * Парсер для отримання списку доменів із сервісів держави-агресора.
@@ -70,7 +71,15 @@ public class AggressorServicesParser extends AbstractPDFParser {
     }
 
     private String findPdfUrl(String url) throws IOException {
-        Document doc = Jsoup.connect(url).get();
+        Document doc;
+        try {
+            doc = Jsoup.connect(url).get();
+        } catch (SSLException e) {
+            logger.warn("SSL verification failed for {}, retrying with per-connection SSL bypass: {}", url, e.getMessage());
+            doc = Jsoup.connect(url)
+                    .sslSocketFactory(createTrustAllSslSocketFactory())
+                    .get();
+        }
         Element pdfLink = doc.select("a[href$=.pdf]").first();
         if (pdfLink != null) {
             String pdfUrl = pdfLink.attr("href");
