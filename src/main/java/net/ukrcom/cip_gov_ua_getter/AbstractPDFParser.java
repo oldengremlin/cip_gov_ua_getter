@@ -28,12 +28,15 @@ import org.slf4j.LoggerFactory;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Properties;
@@ -41,6 +44,11 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Парсер для отримання списку доменів із сервісів держави-агресора.
@@ -92,21 +100,52 @@ public abstract class AbstractPDFParser {
 
     abstract public Set<BlockedDomain> parse();
 
+    protected void disableSSLCertificateVerification() throws Exception {
+        TrustManager[] trustAllCerts = new TrustManager[]{
+            new X509TrustManager() {
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return null;
+                }
+
+                @Override
+                public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                }
+            }
+        };
+
+        SSLContext sc = SSLContext.getInstance("SSL");
+        sc.init(null, trustAllCerts, new SecureRandom());
+        HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+
+        HostnameVerifier allHostsValid = (hostname, session) -> true;
+        HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
+    }
+
     protected void downloadPdf(String pdfUrl, String destinationPath) throws
-            IOException {
-        Path destPath = Paths.get(destinationPath);
-        if (Files.exists(destPath)) {
-            logger.debug("PDF already exists: {}", destPath);
-            return;
+            IOException, Exception {
+
+        try {
+            Path destPath = Paths.get(destinationPath);
+            if (Files.exists(destPath)) {
+                logger.debug("PDF already exists: {}", destPath);
+                return;
+            }
+            Files.createDirectories(destPath.getParent());
+            URL url = new URI(pdfUrl).toURL();
+            try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
+                fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+            }
+            logger.debug("Downloaded PDF to: {}", destPath);
+        } catch (Exception ex) {
+            disableSSLCertificateVerification();
+            downloadPdf(pdfUrl, destinationPath);
         }
-        Files.createDirectories(destPath.getParent());
-        URL url = new URL(pdfUrl);
-        try (InputStream in = url.openStream();
-             ReadableByteChannel rbc = Channels.newChannel(in);
-             FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
-            fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
-        }
-        logger.debug("Downloaded PDF to: {}", destPath);
+
     }
 
     public String prepareDocument(String text) {
