@@ -37,16 +37,12 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Properties;
@@ -54,7 +50,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -113,25 +108,37 @@ public abstract class AbstractPDFParser {
     /**
      * Створює SSLSocketFactory, що довіряє будь-якому сертифікату.
      * Використовується лише per-connection — глобальний стан JVM не змінюється.
+     *
+     * @return
      */
     protected SSLSocketFactory createTrustAllSslSocketFactory() {
         try {
-            TrustManager[] trustAll = new TrustManager[]{
+            TrustManager[] trustAll;
+            trustAll = new TrustManager[]{
                 new X509TrustManager() {
-                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                    public void checkClientTrusted(X509Certificate[] c, String a) {}
-                    public void checkServerTrusted(X509Certificate[] c, String a) {}
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
+                    }
+
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] c, String a) {
+                    }
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] c, String a) {
+                    }
                 }
             };
             SSLContext sc = SSLContext.getInstance("TLS");
             sc.init(null, trustAll, new SecureRandom());
             return sc.getSocketFactory();
-        } catch (Exception e) {
+        } catch (KeyManagementException | NoSuchAlgorithmException e) {
             throw new RuntimeException("Failed to create trust-all SSL socket factory", e);
         }
     }
 
-    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException {
+    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException, URISyntaxException {
 
         Path destPath = Paths.get(destinationPath);
         if (Files.exists(destPath)) {
@@ -148,7 +155,7 @@ public abstract class AbstractPDFParser {
         logger.debug("Downloaded PDF to: {}", destPath);
     }
 
-    private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException {
+    private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException, URISyntaxException {
         URLConnection connection = new URL(pdfUrl).openConnection();
         if (sslSocketFactory != null && connection instanceof HttpsURLConnection) {
             HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
@@ -157,7 +164,6 @@ public abstract class AbstractPDFParser {
         }
         URL url = new URI(pdfUrl).toURL();
         try (InputStream in = url.openStream(); ReadableByteChannel rbc = Channels.newChannel(in); FileOutputStream fos = new FileOutputStream(destPath.toFile())) {
-
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
         }
     }
