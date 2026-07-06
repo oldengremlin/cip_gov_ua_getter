@@ -17,8 +17,10 @@ package net.ukrcom.cip_gov_ua_getter;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 public class BlockedDomain {
 
@@ -55,12 +57,15 @@ public class BlockedDomain {
         }
         this.domainName = dn;
         this.isBlocked = b;
-        /*
-        this.dateTime = LocalDateTime.parse(
-                s.replaceAll("Z$", "")
-        );
-         */
-        this.dateTime = LocalDateTime.parse(s, DateTimeFormatter.ISO_DATE_TIME);
+        try {
+            this.dateTime = LocalDateTime.parse(s, DateTimeFormatter.ISO_DATE_TIME);
+        } catch (DateTimeParseException e) {
+            try {
+                this.dateTime = OffsetDateTime.parse(s).toLocalDateTime();
+            } catch (DateTimeParseException e2) {
+                this.dateTime = Instant.ofEpochMilli(0).atZone(ZoneId.systemDefault()).toLocalDateTime();
+            }
+        }
     }
 
     /**
@@ -142,7 +147,15 @@ public class BlockedDomain {
      * @param s
      */
     public void setDateTime(String s) {
-        this.dateTime = LocalDateTime.parse(s);
+        try {
+            this.dateTime = LocalDateTime.parse(s, DateTimeFormatter.ISO_DATE_TIME);
+        } catch (DateTimeParseException e) {
+            try {
+                this.dateTime = OffsetDateTime.parse(s).toLocalDateTime();
+            } catch (DateTimeParseException e2) {
+                this.dateTime = Instant.ofEpochMilli(0).atZone(ZoneId.systemDefault()).toLocalDateTime();
+            }
+        }
     }
 
     /**

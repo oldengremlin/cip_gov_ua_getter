@@ -29,6 +29,8 @@ import org.slf4j.LoggerFactory;
 public class CGUGetter {
 
     private static final Logger logger = LoggerFactory.getLogger(CGUGetter.class);
+    private static final int MAX_RETRIES = 3;
+    private static final long RETRY_DELAY_MS = 3000;
 
     protected final String urlArticles;
     protected String jsonBodyArticles;
@@ -61,7 +63,32 @@ public class CGUGetter {
                 "\"Chromium\";v=\"129\", \"Not:A-Brand\";v=\"24\", \"Google Chrome\";v=\"129\""
         ).trim();
 
-        try (Playwright playwright = Playwright.create(); Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true).setChannel("chrome"))) {
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                fetchArticles();
+                return;
+            } catch (Exception e) {
+                lastException = e;
+                logger.warn("Attempt {}/{} failed to fetch articles: {}", attempt, MAX_RETRIES, e.getMessage());
+                if (attempt < MAX_RETRIES) {
+                    try {
+                        Thread.sleep(RETRY_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+        logger.error("Failed to fetch articles after {} attempts", MAX_RETRIES);
+        throw new RuntimeException("Failed to fetch articles: " + lastException.getMessage(), lastException);
+    }
+
+    private void fetchArticles() {
+        try (Playwright playwright = Playwright.create();
+             Browser browser = playwright.chromium().launch(
+                     new BrowserType.LaunchOptions().setHeadless(true).setChannel("chrome"))) {
+
             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
                     .setUserAgent(this.userAgent)
                     .setLocale("uk-UA")
@@ -110,9 +137,6 @@ public class CGUGetter {
             String rawResponse = response.text();
             this.jsonBodyArticles = "{ \"posts\": " + rawResponse + " }";
             logger.info("Successfully fetched articles for URL: {}", this.urlArticles);
-        } catch (Exception e) {
-            logger.error("Failed to fetch articles: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to fetch articles: " + e.getMessage(), e);
         }
     }
 

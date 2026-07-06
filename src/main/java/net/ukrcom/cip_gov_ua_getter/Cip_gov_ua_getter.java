@@ -35,6 +35,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.regex.PatternSyntaxException;
 
 /**
  * Консольна утиліта для збору та обробки розпоряджень про блокування доменів.
@@ -89,8 +90,10 @@ public class Cip_gov_ua_getter {
             // Завантаження ключових слів для фільтрації
             String banKeywordsStr = prop.getProperty("ban_keywords", "блокування|обмеження доступу|реалізацію.*обмежувальних");
             String unbanKeywordsStr = prop.getProperty("unban_keywords", "розблокування|припинення тимчасового");
-            String[] banKeywords = banKeywordsStr.split("\\|");
-            String[] unbanKeywords = unbanKeywordsStr.split("\\|");
+            String[] banKeywords = Arrays.stream(banKeywordsStr.split("\\|"))
+                    .map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
+            String[] unbanKeywords = Arrays.stream(unbanKeywordsStr.split("\\|"))
+                    .map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
 
             if (banKeywords.length == 0) {
                 logger.warn("No ban_keywords defined in configuration, using default: блокування");
@@ -116,6 +119,7 @@ public class Cip_gov_ua_getter {
                 return;
             }
             for (int i = 0; i < posts.length(); i++) {
+                try {
                 JSONObject post = posts.getJSONObject(i);
                 String title = post.getString("title");
 
@@ -124,25 +128,17 @@ public class Cip_gov_ua_getter {
                     logger.warn("Skipping unpublished post: {} - {}", post.getString("date"), title);
                     continue;
                 }
-                /*
-                // Перевіряємо, чи пост стосується блокування/обмеження
-                if (!(title.matches(".*блокування.*")
-                        || title.matches(".*обмеження доступу.*")
-                        || title.matches(".*реалізацію.*обмежувальних.*"))) {
-                    logger.warn("Skipping unrelated post: {} - {}", post.getString("date"), title);
-                    continue;
-                }
-
-                // Визначаємо дію (блокувати чи розблокувати)
-                boolean block = !title.matches(".*розблокування.*") && !title.matches(".*припинення тимчасового.*");
-                 */
 
                 // Перевіряємо, чи пост стосується блокування/обмеження
                 boolean isRelevant = false;
                 for (String keyword : banKeywords) {
-                    if (title.matches(".*" + keyword + ".*")) {
-                        isRelevant = true;
-                        break;
+                    try {
+                        if (title.matches(".*" + keyword + ".*")) {
+                            isRelevant = true;
+                            break;
+                        }
+                    } catch (PatternSyntaxException e) {
+                        logger.warn("Invalid ban_keyword pattern '{}': {}", keyword, e.getMessage());
                     }
                 }
                 if (!isRelevant) {
@@ -153,9 +149,13 @@ public class Cip_gov_ua_getter {
                 // Визначаємо дію (блокувати чи розблокувати)
                 boolean block = true;
                 for (String keyword : unbanKeywords) {
-                    if (title.matches(".*" + keyword + ".*")) {
-                        block = false;
-                        break;
+                    try {
+                        if (title.matches(".*" + keyword + ".*")) {
+                            block = false;
+                            break;
+                        }
+                    } catch (PatternSyntaxException e) {
+                        logger.warn("Invalid unban_keyword pattern '{}': {}", keyword, e.getMessage());
                     }
                 }
 
@@ -202,20 +202,31 @@ public class Cip_gov_ua_getter {
                         }
                     }
                 }
+                } catch (Exception e) {
+                    logger.error("Error processing post {}: {}", i, e.getMessage(), e);
+                }
             }
 
             // Parse aggressor services
-            AggressorServicesParser parser = new AggressorServicesParser(prop, debug);
-            Set<BlockedDomain> aggressorDomains = parser.parse();
-            for (BlockedDomain bd : aggressorDomains) {
-                bo.addBlockedDomainName(bd);
+            try {
+                AggressorServicesParser parser = new AggressorServicesParser(prop, debug);
+                Set<BlockedDomain> aggressorDomains = parser.parse();
+                for (BlockedDomain bd : aggressorDomains) {
+                    bo.addBlockedDomainName(bd);
+                }
+            } catch (Exception e) {
+                logger.error("Error in AggressorServicesParser: {}", e.getMessage(), e);
             }
 
             // Parse NKEK.GOV.UA prescripts
-            PlaycityParser parserNkek = new PlaycityParser(prop, debug);
-            Set<BlockedDomain> nkekDomains = parserNkek.parse();
-            for (BlockedDomain bd : nkekDomains) {
-                bo.addBlockedDomainName(bd);
+            try {
+                PlaycityParser parserNkek = new PlaycityParser(prop, debug);
+                Set<BlockedDomain> nkekDomains = parserNkek.parse();
+                for (BlockedDomain bd : nkekDomains) {
+                    bo.addBlockedDomainName(bd);
+                }
+            } catch (Exception e) {
+                logger.error("Error in PlaycityParser: {}", e.getMessage(), e);
             }
 
             // Зберігаємо результати

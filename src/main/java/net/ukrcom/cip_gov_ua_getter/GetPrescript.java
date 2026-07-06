@@ -133,9 +133,15 @@ public class GetPrescript {
         if (serviceSubdomains.length == 0) {
             logger.warn("No valid service subdomains defined in SERVICE_SUBDOMAINS");
         }
-        this.maxFileSizeBytes = Long.parseLong(
-                this.prop.getProperty("max_file_size_bytes", String.valueOf(MAX_FILE_SIZE_BYTES_DEFAULT))
-        );
+        long parsedMax = MAX_FILE_SIZE_BYTES_DEFAULT;
+        try {
+            parsedMax = Long.parseLong(
+                    this.prop.getProperty("max_file_size_bytes", String.valueOf(MAX_FILE_SIZE_BYTES_DEFAULT)).trim()
+            );
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid max_file_size_bytes value, using default: {}", MAX_FILE_SIZE_BYTES_DEFAULT);
+        }
+        this.maxFileSizeBytes = parsedMax;
         logger.debug("Max file size set to {} bytes", this.maxFileSizeBytes);
     }
     
@@ -156,9 +162,8 @@ public class GetPrescript {
                 logger.debug("Skipping fetch for non-text/plain file ID {}: no local file", id);
             }
         } catch (IOException ex) {
-            logger.warn("Failed getPrescriptFrom: {}", id);
+            logger.warn("Failed getPrescriptFrom for ID {}: {}", id, ex.getMessage());
             this.localRead = false;
-            throw new RuntimeException("Failed to get prescript for ID " + id, ex);
         }
         return this;
     }
@@ -214,6 +219,9 @@ public class GetPrescript {
                 URI uri = new URI(urlPrescript);
                 String scheme = uri.getScheme();
                 String host = uri.getHost();
+                if (scheme == null || host == null) {
+                    throw new URISyntaxException(urlPrescript, "Missing scheme or host");
+                }
                 int port = uri.getPort();
                 baseUrl = scheme + "://" + host + (port != -1 ? ":" + port : "") + "/";
             } catch (URISyntaxException e) {
@@ -260,6 +268,9 @@ public class GetPrescript {
                     throw new IOException("HTTP " + response.status() + ": " + response.statusText());
                 }
                 byte[] content = response.body();
+                if (content == null) {
+                    throw new IOException("Empty response body for URL: " + urlPrescript);
+                }
                 if (content.length > maxFileSizeBytes) {
                     logger.warn("File too large: {}  bytes, max allowed: {}", content.length, maxFileSizeBytes);
                     throw new IOException("File too large: " + content.length + " bytes, max allowed: " + maxFileSizeBytes);
@@ -306,7 +317,7 @@ public class GetPrescript {
                 String result = executeAjaxRequest(false);
                 logger.info("Successfully fetched prescript ID {} on attempt {}", this.id, attempt);
                 return result;
-            } catch (IOException e) {
+            } catch (IOException | RuntimeException e) {
                 logger.warn("Attempt {} failed for ID {}: {}", attempt, this.id, e.getMessage());
                 if (attempt == maxRetries) {
                     logger.error("Failed to fetch prescript ID {} after {} attempts: {}", this.id, maxRetries, e.getMessage());
@@ -334,7 +345,7 @@ public class GetPrescript {
         InetAddressValidator ipValidator = InetAddressValidator.getInstance();
         Set<String> validDomains = new HashSet<>();
         
-        for (String s : this.bodyPrescript.split("\n")) {
+        for (String s : this.bodyPrescript.split("\\R")) {
             validDomains.addAll(DomainValidatorUtil.validateDomain(
                     s, serviceSubdomains, null, domainValidator, ipValidator, SPOOF_CHECKER, logger,
                     false, null, null));
@@ -401,7 +412,7 @@ public class GetPrescript {
                     }
                     logger.info("Stored prescript {} on attempt {}", this.id, attempt);
                     return this;
-                } catch (IOException e) {
+                } catch (IOException | IllegalArgumentException e) {
                     logger.warn("Store attempt {} failed for ID {}: {}", attempt, this.id, e.getMessage());
                     if (attempt == 3) {
                         logger.error("Failed to store prescript {} after 3 attempts", this.id);
