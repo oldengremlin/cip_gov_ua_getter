@@ -6,7 +6,7 @@
 
     <groupId>net.ukrcom</groupId>
     <artifactId>cip_gov_ua_getter</artifactId>
-    <version>3.1.1</version>
+    <version>3.2.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -18,7 +18,7 @@
         <dependency>
             <groupId>com.microsoft.playwright</groupId>
             <artifactId>playwright</artifactId>
-            <version>1.54.0</version>
+            <version>1.58.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.ibm.icu</groupId>
@@ -29,32 +29,32 @@
         <dependency>
             <groupId>com.ibm.icu</groupId>
             <artifactId>icu4j</artifactId>
-            <version>77.1</version>
+            <version>78.2</version>
         </dependency>
         <dependency>
             <groupId>commons-validator</groupId>
             <artifactId>commons-validator</artifactId>
-            <version>1.10.0</version>
+            <version>1.10.1</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.18</version>
+            <version>1.5.32</version>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20250517</version>
+            <version>20251224</version>
         </dependency>
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
-            <version>3.0.5</version>
+            <version>3.0.6</version>
         </dependency>
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
-            <version>1.21.1</version>
+            <version>1.22.1</version>
         </dependency>
     </dependencies>
 
@@ -63,7 +63,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.6.2</version>
                 <executions>
                     <execution>
                         <phase>package</phase>

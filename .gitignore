@@ -33,3 +33,4 @@ blocked.*
 *.~
 *~
 /target/
+dependency-reduced-pom.xml
