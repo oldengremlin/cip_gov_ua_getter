@@ -25,9 +25,11 @@ import java.net.URISyntaxException;
 import java.net.URLConnection;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.cert.X509Certificate;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -137,18 +139,27 @@ public abstract class AbstractPDFParser {
     }
 
     protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException {
-
         Path destPath = Paths.get(destinationPath);
         if (Files.exists(destPath)) {
             logger.debug("PDF already exists: {}", destPath);
             return;
         }
         Files.createDirectories(destPath.getParent());
+        Path tempPath = destPath.resolveSibling(destPath.getFileName() + ".tmp");
         try {
-            downloadViaConnection(pdfUrl, destPath, null);
+            downloadViaConnection(pdfUrl, tempPath, null);
         } catch (SSLException e) {
             logger.warn("SSL verification failed for {}, retrying with per-connection SSL bypass: {}", pdfUrl, e.getMessage());
-            downloadViaConnection(pdfUrl, destPath, createTrustAllSslSocketFactory());
+            Files.deleteIfExists(tempPath);
+            downloadViaConnection(pdfUrl, tempPath, createTrustAllSslSocketFactory());
+        } catch (IOException e) {
+            Files.deleteIfExists(tempPath);
+            throw e;
+        }
+        try {
+            Files.move(tempPath, destPath, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(tempPath, destPath, StandardCopyOption.REPLACE_EXISTING);
         }
         logger.debug("Downloaded PDF to: {}", destPath);
     }
@@ -160,6 +171,8 @@ public abstract class AbstractPDFParser {
         } catch (URISyntaxException e) {
             throw new IOException("Invalid PDF URL: " + pdfUrl, e);
         }
+        connection.setConnectTimeout(15_000);
+        connection.setReadTimeout(60_000);
         if (sslSocketFactory != null && connection instanceof HttpsURLConnection) {
             HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
             httpsConn.setSSLSocketFactory(sslSocketFactory);

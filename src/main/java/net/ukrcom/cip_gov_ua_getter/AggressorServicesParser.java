@@ -84,7 +84,9 @@ public class AggressorServicesParser extends AbstractPDFParser {
         Element pdfLink = doc.select("a[href$=.pdf]").first();
         if (pdfLink != null) {
             String pdfUrl = pdfLink.attr("href");
-            if (!pdfUrl.startsWith("http")) {
+            if (pdfUrl.startsWith("//")) {
+                pdfUrl = "https:" + pdfUrl;
+            } else if (!pdfUrl.startsWith("http")) {
                 pdfUrl = "https://" + sourceDomain + pdfUrl;
             }
             return pdfUrl;
