@@ -8,6 +8,8 @@
 
 Починаючи з версії 3.0, утиліта також парсить перелік сервісів держави-агресора з `webportal.nrada.gov.ua`, додаючи відповідні домени до `blocked.result.txt`.
 
+Починаючи з версії 3.2, додано парсинг рішень НКЕК (Національна комісія, що здійснює державне регулювання у сферах електронних комунікацій) із підтримкою `file:`-посилань для завантаження PDF-списків.
+
 ## Чого хотілося б?
 
 Хотілося б, щоб НЦУ надало нормальний API для:
@@ -25,15 +27,19 @@
 - Завантажує розпорядження через API (`articles` та `attachment/download`).
 - Кешує вкладення локально в папці `PRESCRIPT`.
 - Валідує домени, обробляє гомогліфи та пропускає IP-адреси.
-- Формує список заблокованих доменів у `blocked.result.txt`.
+- Формує список заблокованих доменів у `blocked.result.txt` (атомарний запис — без ризику пошкодження файлу).
 - Підтримує дебаг-режим для детальних логів.
 - Парсить перелік сервісів держави-агресора з `webportal.nrada.gov.ua` (з версії 3.0).
+- Парсить рішення НКЕК із PDF-файлів за списком URL (`urlPdfs`), у т.ч. з `file:`-посилань (з версії 3.2).
+- Стійкий до мережевих збоїв: автоматичні повтори запитів, ізоляція збоїв між парсерами.
 
 ### Можливості
 
 - **Парсинг сервісів держави-агресора**: Витягує домени з PDF на `webportal.nrada.gov.ua` і додає їх до `blocked.result.txt`.
-- **Оптимізація швидкості**: ~6 секунд для запусків із локальним кешем, ~30-35 хвилин для першого "чистого" запуску.
-- **Продуктивність**: ~6 секунд для запусків із локальним кешем, ~30-35 хвилин для першого запуску (залежить від мережі та кількості вкладень). Для прискорення увімкніть кешування (локальна папка `PRESCRIPT`) і стабільне підключення до мережі.
+- **Парсинг рішень НКЕК**: Завантажує та обробляє PDF за списком URL із властивості `urlPdfs`. Підтримує `file:/path/to/list.txt` для читання URL зі зовнішнього файлу (рядки з `#` — коментарі, `~` розгортається в домашню директорію).
+- **Продуктивність**: ~6 секунд для запусків із локальним кешем, ~30-35 хвилин для першого запуску (залежить від мережі та кількості вкладень).
+- **Стійкість до збоїв**: Автоматичні повтори запитів (`CGUGetter` — 3 спроби, `GetPrescript` — 5 спроб). Збій одного парсера не зупиняє обробку інших. Некоректний рядок у `ban_keywords`/`unban_keywords` не ламає весь запуск.
+- **Безпечний запис**: `blocked.result.txt` та PDF-файли записуються атомарно (через тимчасовий файл + rename), що виключає пошкодження при аварійному завершенні.
 - **Блокування непотрібних ресурсів**: Ігноруються `.jpg`, `.jpeg`, `.png`, `.svg`, `.woff2`, `.css`, Google Analytics і Google Tag Manager для швидшого завантаження.
 - **Гнучке логування**: Режим `-d` для дебаг-логів, чисті логи на `INFO` за замовчуванням.
 - **Валідатор доменів**: Перевірка через `commons-validator`, обробка гомогліфів із `icu4j`.
@@ -76,10 +82,12 @@
    AggressorServices_SOURCE_DOMAIN=webportal.nrada.gov.ua
    AggressorServices_PRIMARY_PDF_NAME=Perelik.#450.2023.07.06.pdf
    AggressorServices_prescript_to=./PRESCRIPT/MANUAL
+   # URL PDF-файлів НКЕК: прямі https:// через кому або file:/path/to/list.txt
+   urlPdfs=file:~/domains.txt
    SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test,m
    ban_keywords=блокування|обмеження доступу|реалізацію.*обмежувальних
    unban_keywords=розблокування|припинення тимчасового
-   max_file_size_bytes=10485760   
+   max_file_size_bytes=10485760
    ```
 
 ## Використання
@@ -176,6 +184,14 @@ AggressorServices_PRIMARY_PDF_NAME=Perelik.#450.2023.07.06.pdf
 # Папка для збереження PDF
 AggressorServices_prescript_to=./PRESCRIPT/MANUAL
 
+# URL PDF-файлів НКЕК: прямі посилання через кому або file:/шлях/до/файлу
+# У файлі — по одному URL на рядок; рядки з # ігноруються; ~ → домашня директорія
+# Приклади:
+#   urlPdfs=https://nkek.gov.ua/...pdf,https://nkek.gov.ua/...pdf
+#   urlPdfs=file:~/domains.txt
+#   urlPdfs=file:/home/user/nkek_pdfs.txt,https://nkek.gov.ua/extra.pdf
+urlPdfs=file:~/domains.txt
+
 # Субдомени для видалення (через кому)
 SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test
 ```
@@ -207,10 +223,11 @@ SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,ap
 
 - **Логіка роботи**:
 
-  - `CGUGetter`: Завантажує JSON із розпорядженнями.
-  - `GetPrescript`: Завантажує/читає вкладення, валідує домени.
-  - `AggressorServicesParser`: Парсить PDF із сервісами держави-агресора.
-  - `BlockedObjects`: Формує список заблокованих доменів.
+  - `CGUGetter`: Завантажує JSON із розпорядженнями (3 автоматичні повтори при збої).
+  - `GetPrescript`: Завантажує/читає вкладення, валідує домени (5 повторів).
+  - `AggressorServicesParser`: Парсить PDF із сервісами держави-агресора (`webportal.nrada.gov.ua`).
+  - `PlaycityParser`: Парсить PDF-рішення НКЕК за списком URL із `urlPdfs`; підтримує `file:` для читання URL зі зовнішнього файлу.
+  - `BlockedObjects`: Формує список заблокованих доменів, записує атомарно.
   - `BlockedDomain`/`BlockedDomainComparator`: Зберігає та сортує домени.
 
 - **Майбутні ідеї**:
@@ -239,7 +256,7 @@ SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,ap
 Відкрийте `blocked.result.txt` — там список валідних доменів. У дебаг-режимі (`-d`) логи в `logs/cip_gov_ua_getter.log` покажуть деталі валідації.
 
 **Що робити, якщо API не відповідає?**  
-Перевірте мережу та логи в `failed_ids.txt`. Спробуйте повторити запуск або використайте локальний кеш.
+Утиліта автоматично повторює запит: `CGUGetter` — 3 рази з паузою 3 с, `GetPrescript` — 5 разів із випадковою паузою 1–6 с. Якщо всі спроби вичерпані — ID записується в `failed_ids.txt`. Перевірте мережу та спробуйте повторний запуск; наступний раз для вже завантажених файлів використається локальний кеш.
 
 **Чому PDF із сервісів агресора не завантажується?**  
 Переконайтеся, що `urlAggressorServices` і `AggressorServices_SOURCE_DOMAIN` у `cip.gov.ua.properties` коректні. Логи вкажуть на проблему (наприклад, 404).
@@ -270,6 +287,28 @@ Apache License 2.0. Див. [LICENSE](LICENSE) та [NOTICE](NOTICE).
 ---
 
 ## Version History
+
+**Version 3.2.0**
+
+- Додано парсинг рішень НКЕК (`PlaycityParser`):
+  - Нова властивість `urlPdfs` — перелік PDF-посилань через кому.
+  - Підтримка `file:/шлях` — URL завантажуються зі зовнішнього текстового файлу (по одному на рядок, `#` — коментарі, `~` → домашня директорія).
+  - Відсутній або нечитабельний файл → `WARN` у лог, без падіння.
+  - Некоректні рядки (не `http://`/`https://`) → `WARN` і пропуск.
+  - Ім'я кешованого PDF-файлу обрізається до 200 символів (зберігається кінець, найбільш унікальна частина).
+- Підвищено стійкість до мережевих і системних збоїв:
+  - `CGUGetter`: 3 автоматичні повтори з паузою 3 с при `ERR_NETWORK_CHANGED` та інших помилках.
+  - `GetPrescript.fetchPrescriptWithRetry`: ловить `RuntimeException` (Playwright) на рівні з `IOException`.
+  - `GetPrescript.getPrescriptFrom`: більше не перекидає `RuntimeException` — логує `WARN` і повертає `this`.
+  - Кожен пост у головному циклі огорнутий `try-catch(Exception)` — збій одного поста не зупиняє решту.
+  - `AggressorServicesParser` і `PlaycityParser` ізольовані — збій парсера не скасовує `bo.storeState()`.
+  - `PatternSyntaxException` захищає від некоректних регулярних виразів у `ban_keywords`/`unban_keywords`.
+- Виправлено потенційні вразливості:
+  - `BlockedDomain.setDateTime`: `OffsetDateTime`-fallback для дат із часовим поясом (напр. `Z`-суфікс).
+  - `AbstractPDFParser.downloadViaConnection`: таймаути 15 с (connect) / 60 с (read).
+  - `AbstractPDFParser.downloadPdf`: атомарний запис PDF через `.tmp` + rename.
+  - `GetPrescript`: `NumberFormatException`-захист для `max_file_size_bytes`; `null`-перевірка `response.body()`; `IllegalArgumentException` у retry-блоці `storePrescriptTo`; `split("\\R")` замість `split("\n")` для Windows CRLF; `null`-перевірка scheme/host при побудові `baseUrl`.
+  - `AggressorServicesParser.findPdfUrl`: коректна обробка protocol-relative URL (`//example.com`).
 
 **Version 3.1.7**
 
