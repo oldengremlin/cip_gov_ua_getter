@@ -16,6 +16,8 @@
 package net.ukrcom.cip_gov_ua_getter;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -77,6 +79,16 @@ public class PlaycityParser extends AbstractPDFParser {
 
         for (String targetUrl : this.urlPdfs) {
             if (targetUrl == null || targetUrl.isEmpty()) {
+                continue;
+            }
+            try {
+                URI uri = new URI(targetUrl);
+                if (!uri.isAbsolute() || (!"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme()))) {
+                    logger.warn("Skipping non-HTTP entry in urlPdfs: {}", targetUrl);
+                    continue;
+                }
+            } catch (URISyntaxException e) {
+                logger.warn("Skipping malformed URL in urlPdfs: {}: {}", targetUrl, e.getMessage());
                 continue;
             }
             try {
