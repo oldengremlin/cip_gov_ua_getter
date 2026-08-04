@@ -19,7 +19,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import java.io.IOException;
-import java.nio.file.Path;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -53,13 +53,8 @@ public class AggressorServicesParser extends AbstractPDFParser {
         try {
             String pdfUrl = findPdfUrl(targetUrl);
             if (pdfUrl != null) {
-                Path primaryPdfPath = manualDir.resolve(primaryPdfName);
-                downloadPdf(pdfUrl, primaryPdfPath.toString());
-                logger.info("Successfully downloaded PDF to: {}", primaryPdfPath);
-                domains.addAll(extractDomainsFromPDF(primaryPdfPath.toString()));
-                if (debug) {
-                    logger.debug("Extracted {} domains from aggressor services PDF", domains.size());
-                }
+                domains.addAll(downloadAndExtractAll(
+                        Map.of(pdfUrl, manualDir.resolve(primaryPdfName))));
             } else {
                 logger.warn("Could not find PDF link on page: {}", targetUrl);
             }
