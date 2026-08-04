@@ -213,13 +213,13 @@ SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,ap
 
 - **Залежності**:
 
-  - Playwright 1.51.0 (Apache License 2.0)
-  - commons-validator 1.9.0 (Apache License 2.0)
-  - icu4j 77.1 (Unicode License)
-  - logback-classic 1.5.18 (EPL 1.0/LGPL 2.1)
-  - json 20250107 (JSON License)
-  - pdfbox 3.0.3 (Apache License 2.0)
-  - jsoup 1.18.1 (MIT License)
+  - Playwright 1.58.0 (Apache License 2.0)
+  - commons-validator 1.10.1 (Apache License 2.0)
+  - icu4j 78.2 (Unicode License)
+  - logback-classic 1.5.32 (EPL 1.0/LGPL 2.1)
+  - json 20251224 (JSON License)
+  - pdfbox 3.0.6 (Apache License 2.0)
+  - jsoup 1.22.1 (MIT License)
 
 - **Логіка роботи**:
 
