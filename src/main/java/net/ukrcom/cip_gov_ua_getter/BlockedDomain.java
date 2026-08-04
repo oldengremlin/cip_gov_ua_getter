@@ -24,9 +24,14 @@ import java.time.format.DateTimeParseException;
 
 public class BlockedDomain {
 
-    protected String domainName;
-    protected boolean isBlocked;
-    protected LocalDateTime dateTime;
+    private static final LocalDateTime EPOCH_START = Instant
+            .ofEpochMilli(0)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDateTime();
+
+    protected final String domainName;
+    protected final boolean isBlocked;
+    protected final LocalDateTime dateTime;
 
     /**
      * Конструктор класа.
@@ -36,10 +41,7 @@ public class BlockedDomain {
      * @param dt - дата в форматі LocalDateTime
      */
     public BlockedDomain(String dn, boolean b, LocalDateTime dt) {
-        if (dn == null || dn.isBlank() || dn.length() > 255) {
-            throw new IllegalArgumentException("Domain name is invalid or exceeds 255 characters: " + dn);
-        }
-        this.domainName = dn;
+        this.domainName = validateDomainName(dn);
         this.isBlocked = b;
         this.dateTime = dt;
     }
@@ -52,20 +54,9 @@ public class BlockedDomain {
      * @param s - дата в текстовому форматі. Береться з атрибута date.
      */
     public BlockedDomain(String dn, boolean b, String s) {
-        if (dn == null || dn.isBlank() || dn.length() > 255) {
-            throw new IllegalArgumentException("Domain name is invalid or exceeds 255 characters: " + dn);
-        }
-        this.domainName = dn;
+        this.domainName = validateDomainName(dn);
         this.isBlocked = b;
-        try {
-            this.dateTime = LocalDateTime.parse(s, DateTimeFormatter.ISO_DATE_TIME);
-        } catch (DateTimeParseException e) {
-            try {
-                this.dateTime = OffsetDateTime.parse(s).toLocalDateTime();
-            } catch (DateTimeParseException e2) {
-                this.dateTime = Instant.ofEpochMilli(0).atZone(ZoneId.systemDefault()).toLocalDateTime();
-            }
-        }
+        this.dateTime = parseDateTime(s);
     }
 
     /**
@@ -74,17 +65,41 @@ public class BlockedDomain {
      * @param dn - ім'я домена
      */
     public BlockedDomain(String dn) {
+        this.domainName = validateDomainName(dn);
+        this.isBlocked = true;
+        this.dateTime = EPOCH_START;
+    }
+
+    /**
+     * Перевіряє коректність імені домена.
+     *
+     * @param dn - ім'я домена
+     * @return те саме ім'я, якщо воно валідне
+     */
+    private static String validateDomainName(String dn) {
         if (dn == null || dn.isBlank() || dn.length() > 255) {
             throw new IllegalArgumentException("Domain name is invalid or exceeds 255 characters: " + dn);
         }
-        this.domainName = dn;
-        this.isBlocked = true;
-        this.dateTime = Instant
-                .ofEpochMilli(0)
-                .atZone(
-                        ZoneId.systemDefault()
-                )
-                .toLocalDateTime();
+        return dn;
+    }
+
+    /**
+     * Розбирає дату з тексту. Спершу як локальну дату-час, потім як дату зі
+     * зсувом (наприклад, із суфіксом "Z"). Якщо не вдалося — початок епохи.
+     *
+     * @param s - дата в текстовому форматі
+     * @return розібрана дата або початок епохи
+     */
+    private static LocalDateTime parseDateTime(String s) {
+        try {
+            return LocalDateTime.parse(s, DateTimeFormatter.ISO_DATE_TIME);
+        } catch (DateTimeParseException e) {
+            try {
+                return OffsetDateTime.parse(s).toLocalDateTime();
+            } catch (DateTimeParseException e2) {
+                return EPOCH_START;
+            }
+        }
     }
 
     /**
@@ -97,15 +112,6 @@ public class BlockedDomain {
     }
 
     /**
-     * Встановлює ім'я домена.
-     *
-     * @param s
-     */
-    public void setDomainName(String s) {
-        this.domainName = s;
-    }
-
-    /**
      * Повертає статус.
      *
      * @return
@@ -115,47 +121,12 @@ public class BlockedDomain {
     }
 
     /**
-     * Встановлює статус.
-     *
-     * @param b
-     */
-    public void setIsBlocked(boolean b) {
-        this.isBlocked = b;
-    }
-
-    /**
      * Повертає дату та час.
      *
      * @return
      */
     public LocalDateTime getDateTime() {
         return this.dateTime;
-    }
-
-    /**
-     * Встановлює дату та час з LocalDateTime.
-     *
-     * @param d
-     */
-    public void setDateTime(LocalDateTime d) {
-        this.dateTime = d;
-    }
-
-    /**
-     * Встановлює дату та час, аналізуючи строку.
-     *
-     * @param s
-     */
-    public void setDateTime(String s) {
-        try {
-            this.dateTime = LocalDateTime.parse(s, DateTimeFormatter.ISO_DATE_TIME);
-        } catch (DateTimeParseException e) {
-            try {
-                this.dateTime = OffsetDateTime.parse(s).toLocalDateTime();
-            } catch (DateTimeParseException e2) {
-                this.dateTime = Instant.ofEpochMilli(0).atZone(ZoneId.systemDefault()).toLocalDateTime();
-            }
-        }
     }
 
     /**

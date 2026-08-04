@@ -35,8 +35,16 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Set;
@@ -66,6 +74,37 @@ public abstract class AbstractPDFParser {
     private static final DomainValidator DOMAIN_VALIDATOR = DomainValidator.getInstance(true);
     private static final InetAddressValidator IP_VALIDATOR = InetAddressValidator.getInstance();
     private static final SpoofChecker SPOOF_CHECKER = new SpoofChecker.Builder().build();
+
+    /**
+     * Шаблон для виділення доменів із тексту PDF. Компілюється один раз —
+     * раніше створювався заново на кожен документ.
+     * <p>
+     * Усередині символьного класу [...] зірочка є літералом, а не
+     * квантифікатором, тому в класах її навмисно немає.
+     */
+    private static final Pattern DOMAIN_PATTERN = Pattern.compile(
+            "(?:https?://(?:www\\.)?"
+            + "(?:[-a-zA-Z0-9@:%._\\+~#=]|[-\\p{L}\\p{M}]{1,256})"
+            + "\\.(?:[a-zA-Z0-9()]|[\\p{L}\\p{M}]){1,6}\\b"
+            + "(?:[-a-zA-Z0-9()@:%_\\+.~#?&//=]*)|"
+            + "\\b(?:[a-zA-Z0-9\\p{L}\\p{M}]"
+            + "(?:[a-zA-Z0-9\\p{L}\\p{M}-]*[a-zA-Z0-9\\p{L}\\p{M}])?\\.)+"
+            + "(?:[a-zA-Z]{2,}|[\\p{L}\\p{M}]{2,})"
+            + "(?:\\/[-a-zA-Z0-9@:%_\\+.~#?&//=]*)?\\b)");
+
+    /**
+     * Скільки PDF качаємо одночасно. Джерела — держсайти, тож тримаємо число
+     * навмисно низьким: паралелізм тут потрібен лише щоб не чекати на кожен
+     * файл послідовно, а не щоб навантажити сервер.
+     */
+    private static final int DOWNLOAD_PERMITS = 3;
+
+    /**
+     * Скільки PDF розбираємо одночасно. Робота CPU-bound, тож фактичний
+     * паралелізм і так обмежений кількістю ядер; семафор стримує пам'ять —
+     * PDFBox тримає документ повністю в купі.
+     */
+    private static final int PARSE_PERMITS = 12;
 
     protected final Properties properties;
     protected final Path manualDir;
@@ -185,7 +224,71 @@ public abstract class AbstractPDFParser {
     }
 
     public String prepareDocument(String text) {
-        return text.replaceAll("\n", "");
+        return text.replace("\n", "");
+    }
+
+    /**
+     * Завантажує й розбирає набір PDF паралельно на віртуальних потоках JDK 21.
+     * <p>
+     * Кожен файл проходить власний конвеєр «завантажити → розібрати», без
+     * бар'єра між фазами: доки одні файли ще качаються, інші вже
+     * розбираються. Дві окремі квоти обмежують навантаження — на мережу
+     * ({@link #DOWNLOAD_PERMITS}) і на пам'ять ({@link #PARSE_PERMITS}).
+     * <p>
+     * Збій окремого файлу не зупиняє решту: помилка потрапляє в лог, а решта
+     * конвеєрів працює далі.
+     *
+     * @param targets мапа «URL → шлях, куди зберегти»
+     * @return об'єднаний перелік доменів з усіх PDF
+     */
+    protected Set<BlockedDomain> downloadAndExtractAll(Map<String, Path> targets) {
+        Set<BlockedDomain> domains = new TreeSet<>(new BlockedDomainComparator());
+        if (targets.isEmpty()) {
+            return domains;
+        }
+
+        Semaphore downloadLimit = new Semaphore(DOWNLOAD_PERMITS);
+        Semaphore parseLimit = new Semaphore(PARSE_PERMITS);
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Set<BlockedDomain>>> futures = new ArrayList<>(targets.size());
+            for (Map.Entry<String, Path> target : targets.entrySet()) {
+                String url = target.getKey();
+                Path path = target.getValue();
+                futures.add(executor.submit(() -> {
+                    downloadLimit.acquire();
+                    try {
+                        downloadPdf(url, path.toString());
+                        logger.info("Successfully downloaded PDF from {} to {}", url, path);
+                    } finally {
+                        downloadLimit.release();
+                    }
+                    parseLimit.acquire();
+                    try {
+                        return extractDomainsFromPDF(path.toString());
+                    } finally {
+                        parseLimit.release();
+                    }
+                }));
+            }
+
+            for (Future<Set<BlockedDomain>> future : futures) {
+                try {
+                    domains.addAll(future.get());
+                } catch (ExecutionException e) {
+                    logger.error("Error processing PDF: {}", e.getCause().getMessage(), e.getCause());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.warn("Interrupted while collecting PDF results");
+                    break;
+                }
+            }
+        }
+
+        if (debug) {
+            logger.debug("Extracted {} domains from {} PDF(s)", domains.size(), targets.size());
+        }
+        return domains;
     }
 
     protected Set<BlockedDomain> extractDomainsFromPDF(String filePath) {
@@ -200,16 +303,7 @@ public abstract class AbstractPDFParser {
 
                 logger.debug("Document: {}", cleanedText);
 
-                String domainPattern = "(?:https?://(?:www\\.)?"
-                        + "(?:[-a-zA-Z0-9@:%._\\+~#=]|[-\\p{L}\\p{M}*]{1,256})"
-                        + "\\.(?:[a-zA-Z0-9()]|[\\p{L}\\p{M}*]){1,6}\\b"
-                        + "(?:[-a-zA-Z0-9()@:%_\\+.~#?&//=]*)|"
-                        + "\\b(?:[a-zA-Z0-9\\p{L}\\p{M}*]"
-                        + "(?:[a-zA-Z0-9\\p{L}\\p{M}*-]*[a-zA-Z0-9\\p{L}\\p{M}*])?\\.)+"
-                        + "(?:[a-zA-Z]{2,}|[\\p{L}\\p{M}*]{2,})"
-                        + "(?:\\/[-a-zA-Z0-9@:%_\\+.~#?&//=]*)?\\b)";
-                Pattern domainRegex = Pattern.compile(domainPattern);
-                Matcher domainMatcher = domainRegex.matcher(cleanedText);
+                Matcher domainMatcher = DOMAIN_PATTERN.matcher(cleanedText);
 
                 while (domainMatcher.find()) {
                     String match = domainMatcher.group();

@@ -26,7 +26,6 @@ import org.json.JSONObject;
  */
 public class ParseCGUArticlesJson {
 
-    protected final JSONObject json;
     protected final JSONArray posts;
 
     /**
@@ -36,8 +35,7 @@ public class ParseCGUArticlesJson {
      * @throws JSONException
      */
     public ParseCGUArticlesJson(String json_data) throws JSONException {
-        this.json = new JSONObject(json_data);
-        this.posts = json.getJSONArray("posts");
+        this.posts = new JSONObject(json_data).getJSONArray("posts");
     }
 
     /**

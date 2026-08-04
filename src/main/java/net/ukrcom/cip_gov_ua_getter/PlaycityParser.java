@@ -22,10 +22,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * Парсер для отримання списку доменів із сервісів держави-агресора.
@@ -75,7 +76,9 @@ public class PlaycityParser extends AbstractPDFParser {
 
     @Override
     public Set<BlockedDomain> parse() {
-        Set<BlockedDomain> domains = new TreeSet<>(new BlockedDomainComparator());
+        // LinkedHashMap зберігає порядок зі списку — зручніше читати лог.
+        // Дублікати URL природно згортаються в один запис.
+        Map<String, Path> targets = new LinkedHashMap<>();
 
         for (String targetUrl : this.urlPdfs) {
             if (targetUrl == null || targetUrl.isEmpty()) {
@@ -91,26 +94,25 @@ public class PlaycityParser extends AbstractPDFParser {
                 logger.warn("Skipping malformed URL in urlPdfs: {}: {}", targetUrl, e.getMessage());
                 continue;
             }
-            try {
-                String rawName = targetUrl.replaceAll("[:/]", "-");
-                if (rawName.length() > 200) {
-                    rawName = rawName.substring(rawName.length() - 200);
-                }
-                Path primaryPdfPath = manualDir.resolve(rawName);
-                downloadPdf(targetUrl, primaryPdfPath.toString());
-                logger.info("Successfully downloaded PDF from {} to {}", targetUrl, primaryPdfPath);
+            String rawName = targetUrl.replaceAll("[:/]", "-");
+            if (rawName.length() > 200) {
+                rawName = rawName.substring(rawName.length() - 200);
+            }
+            Path pdfPath = manualDir.resolve(rawName);
 
-                domains.addAll(extractDomainsFromPDF(primaryPdfPath.toString()));
-                if (debug) {
-                    logger.debug("Extracted {} domains from PDF", domains.size());
-                }
-
-            } catch (Exception e) {
-                logger.error("Error parsing aggressor services: {}", e.getMessage(), e);
+            // Обрізання імені до 200 символів теоретично може зрівняти два різних
+            // URL. Послідовно це давало б лише зайве перезавантаження, а
+            // паралельно — два потоки в один тимчасовий файл. Тому пропускаємо.
+            if (targets.containsValue(pdfPath)) {
+                logger.warn("Skipping URL whose cache file name collides with an earlier one: {}", targetUrl);
+                continue;
+            }
+            if (targets.putIfAbsent(targetUrl, pdfPath) != null) {
+                logger.debug("Duplicate URL in urlPdfs, skipping: {}", targetUrl);
             }
         }
 
-        return domains;
+        return downloadAndExtractAll(targets);
     }
 
     @Override

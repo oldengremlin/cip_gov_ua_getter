@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 import java.util.TreeSet;
+import java.util.stream.Stream;
 import org.apache.commons.validator.routines.DomainValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,8 +32,6 @@ public class BlockedObjects {
 
     private static final Logger logger = LoggerFactory.getLogger(BlockedObjects.class);
 
-    protected String currentPath; // Current dir
-    protected String currentDir;  // Current dir using System
     private final String[] blockedNames;
     private final String blockedResultName;
     private final TreeSet<BlockedDomain> blockedDomains;
@@ -43,13 +42,6 @@ public class BlockedObjects {
      * @param p - об'єкт властивостей
      */
     public BlockedObjects(Properties p) {
-        try {
-            this.currentPath = new File(".").getCanonicalPath();
-            this.currentDir = System.getProperty("user.dir");
-        } catch (IOException ex) {
-            logger.error("Failed to initialize paths: {}", ex.getMessage(), ex);
-        }
-
         this.blockedNames = p.getProperty("blocked", "blocked.txt").split(";");
         this.blockedResultName = p.getProperty("blocked_result", "blocked.result.txt");
         this.blockedDomains = new TreeSet<>(new BlockedDomainComparator());
@@ -63,60 +55,49 @@ public class BlockedObjects {
      * @throws IOException у разі помилок читання файлів
      */
     public BlockedObjects getBlockedDomainNames() throws IOException {
-        /*
+        DomainValidator domainValidator = DomainValidator.getInstance(true);
         for (String blockedName : blockedNames) {
             File blockedFile = new File(blockedName.trim());
-            if (blockedFile.exists() && blockedFile.isFile() && blockedFile.canRead()) {
-                logger.info("Reading blocked domains from {}", blockedName);
-                try (BufferedReader bufferedReader = new BufferedReader(
-                        new InputStreamReader(new FileInputStream(blockedFile), "UTF-8"))) {
-                    String blockedDomainName;
-                    while ((blockedDomainName = bufferedReader.readLine()) != null) {
-                        if (!blockedDomainName.trim().isEmpty()) {
-                            this.addBlockedDomainName(new BlockedDomain(blockedDomainName.trim()));
-                        }
-                    }
-                }
-            } else {
+            if (!blockedFile.exists() || !blockedFile.isFile() || !blockedFile.canRead()) {
                 logger.warn("File {} does not exist or is not readable", blockedName);
+                continue;
             }
-        }
-        return this;
-         */
-        for (String blockedName : blockedNames) {
-            File blockedFile = new File(blockedName.trim());
-            if (blockedFile.exists() && blockedFile.isFile() && blockedFile.canRead()) {
-                logger.info("Reading blocked domains from {}", blockedName);
-                DomainValidator domainValidator = DomainValidator.getInstance(true);
-                Files.lines(Paths.get(blockedFile.getPath()), StandardCharsets.UTF_8)
-                        .map(String::trim)
+            logger.info("Reading blocked domains from {}", blockedName);
+            try (Stream<String> lines = Files.lines(blockedFile.toPath(), StandardCharsets.UTF_8)) {
+                lines.map(String::trim)
                         .filter(line -> !line.isEmpty())
-                        .forEach(line -> {
-                            if (line.length() > 255) {
-                                logger.warn("Skipping domain from file due to invalid length: {}", line);
-                                return;
-                            }
-                            try {
-                                String idnDomain = IDN.toASCII(line, IDN.ALLOW_UNASSIGNED);
-                                if (idnDomain.length() > 255) {
-                                    logger.warn("Skipping domain after IDN conversion due to length: {}", idnDomain);
-                                    return;
-                                }
-                                if (domainValidator.isValid(idnDomain)) {
-                                    this.addBlockedDomainName(new BlockedDomain(idnDomain));
-                                    logger.info("Added domain from file: {}", idnDomain);
-                                } else {
-                                    logger.warn("Invalid domain in file: {}", line);
-                                }
-                            } catch (IllegalArgumentException e) {
-                                logger.warn("Failed to process domain from file: {} ({})", line, e.getMessage());
-                            }
-                        });
-            } else {
-                logger.warn("File {} does not exist or is not readable", blockedName);
+                        .forEach(line -> addDomainFromFile(line, domainValidator));
             }
         }
         return this;
+    }
+
+    /**
+     * Валідує один рядок із вхідного файлу і додає домен до переліку.
+     *
+     * @param line рядок із файлу
+     * @param domainValidator валідатор доменів
+     */
+    private void addDomainFromFile(String line, DomainValidator domainValidator) {
+        if (line.length() > 255) {
+            logger.warn("Skipping domain from file due to invalid length: {}", line);
+            return;
+        }
+        try {
+            String idnDomain = IDN.toASCII(line, IDN.ALLOW_UNASSIGNED);
+            if (idnDomain.length() > 255) {
+                logger.warn("Skipping domain after IDN conversion due to length: {}", idnDomain);
+                return;
+            }
+            if (domainValidator.isValid(idnDomain)) {
+                this.addBlockedDomainName(new BlockedDomain(idnDomain));
+                logger.info("Added domain from file: {}", idnDomain);
+            } else {
+                logger.warn("Invalid domain in file: {}", line);
+            }
+        } catch (IllegalArgumentException e) {
+            logger.warn("Failed to process domain from file: {} ({})", line, e.getMessage());
+        }
     }
 
     /**
