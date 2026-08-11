@@ -171,8 +171,6 @@ public class GetPrescript {
 
             // Ініціалізація сесії
             logger.debug("Navigating to base URL: {}", baseUrl);
-            //page.navigate(baseUrl);
-            //page.waitForLoadState();
             page.navigate(baseUrl, new Page.NavigateOptions().setTimeout(30000));  // 30с тайм-аут
             page.waitForLoadState(LoadState.LOAD, new Page.WaitForLoadStateOptions().setTimeout(30000));  // Тайм-аут для wait
 

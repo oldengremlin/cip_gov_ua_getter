@@ -293,13 +293,13 @@ flowchart LR
    - Звичайний режим:
 
      ```bash
-     java -jar target/cip_gov_ua_getter-3.2.1-all.jar
+     java -jar target/cip_gov_ua_getter-3.2.2-all.jar
      ```
 
    - Дебаг-режим:
 
      ```bash
-     java -jar target/cip_gov_ua_getter-3.2.1-all.jar -d
+     java -jar target/cip_gov_ua_getter-3.2.2-all.jar -d
      ```
 
 3. **Результати**:
