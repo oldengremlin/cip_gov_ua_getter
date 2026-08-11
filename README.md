@@ -483,8 +483,8 @@ Apache License 2.0. Див. [LICENSE](LICENSE) та [NOTICE](NOTICE).
 ## Пов'язані проєкти
 
 - [AS12593-BLOCK](https://github.com/oldengremlin/AS12593-BLOCK.git) —
-  практичне застосування результатів цієї утиліти: конфігурація й
-  результати роботи `cip_gov_ua_getter` для конкретного AS.
+  практичні результати роботи двох проєктів, `cip_gov_ua_getter` і
+  ASBlockWar.
 - [ASBlockWar](https://github.com/oldengremlin/asblockwar.git) — суміжний
   проєкт, над яким ведеться паралельна робота.
 
