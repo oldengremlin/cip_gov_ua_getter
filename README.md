@@ -29,13 +29,13 @@
 - Валідує домени, обробляє гомогліфи та пропускає IP-адреси.
 - Формує список заблокованих доменів у `blocked.result.txt` (атомарний запис — без ризику пошкодження файлу).
 - Підтримує дебаг-режим для детальних логів.
-- Парсить перелік сервісів держави-агресора з `webportal.nrada.gov.ua` (з версії 3.0).
+- Парсить перелік сервісів держави-агресора з `webportal.nrada.gov.ua` (з версії 3.0); кеш PDF має термін придатності й оновлюється автоматично (з версії 3.2.1).
 - Парсить рішення НКЕК із PDF-файлів за списком URL (`urlPdfs`), у т.ч. з `file:`-посилань (з версії 3.2).
 - Стійкий до мережевих збоїв: автоматичні повтори запитів, ізоляція збоїв між парсерами.
 
 ### Можливості
 
-- **Парсинг сервісів держави-агресора**: Витягує домени з PDF на `webportal.nrada.gov.ua` і додає їх до `blocked.result.txt`.
+- **Парсинг сервісів держави-агресора**: Витягує домени з PDF на `webportal.nrada.gov.ua` і додає їх до `blocked.result.txt`. Локальний кеш PDF придатний `AggressorServices_max_age_hours` годин (типово 24), далі — автоматичне оновлення; якщо сервер недоступний, використовується наявна застаріла копія (без падіння джерела).
 - **Парсинг рішень НКЕК**: Завантажує та обробляє PDF за списком URL із властивості `urlPdfs`. Підтримує `file:/path/to/list.txt` для читання URL зі зовнішнього файлу (рядки з `#` — коментарі, `~` розгортається в домашню директорію).
 - **Продуктивність**: ~6 секунд для запусків із локальним кешем, ~30-35 хвилин для першого запуску (залежить від мережі та кількості вкладень).
 - **Стійкість до збоїв**: Автоматичні повтори запитів (`CGUGetter` — 3 спроби, `GetPrescript` — 5 спроб). Збій одного парсера не зупиняє обробку інших. Некоректний рядок у `ban_keywords`/`unban_keywords` не ламає весь запуск.
@@ -82,6 +82,7 @@
    AggressorServices_SOURCE_DOMAIN=webportal.nrada.gov.ua
    AggressorServices_PRIMARY_PDF_NAME=Perelik.#450.2023.07.06.pdf
    AggressorServices_prescript_to=./PRESCRIPT/MANUAL
+   AggressorServices_max_age_hours=24
    # URL PDF-файлів НКЕК: прямі https:// через кому або file:/path/to/list.txt
    urlPdfs=file:~/domains.txt
    SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test,m
@@ -184,6 +185,12 @@ AggressorServices_PRIMARY_PDF_NAME=Perelik.#450.2023.07.06.pdf
 # Папка для збереження PDF
 AggressorServices_prescript_to=./PRESCRIPT/MANUAL
 
+# Термін придатності кешу PDF агресора, у годинах. Сайт nrada.gov.ua перевидає
+# перелік під новим іменем файлу щоразу, коли оновлює його, тож без цього кеш
+# застаріває назавжди. Якщо сервер недоступний під час оновлення — джерело не
+# провалюється, використовується наявна застаріла копія (WARN у лог)
+AggressorServices_max_age_hours=24
+
 # URL PDF-файлів НКЕК: прямі посилання через кому або file:/шлях/до/файлу
 # У файлі — по одному URL на рядок; рядки з # ігноруються; ~ → домашня директорія
 # Приклади:
@@ -225,7 +232,7 @@ SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,ap
 
   - `CGUGetter`: Завантажує JSON із розпорядженнями (3 автоматичні повтори при збої).
   - `GetPrescript`: Завантажує/читає вкладення, валідує домени (5 повторів).
-  - `AggressorServicesParser`: Парсить PDF із сервісами держави-агресора (`webportal.nrada.gov.ua`).
+  - `AggressorServicesParser`: Парсить PDF із сервісами держави-агресора (`webportal.nrada.gov.ua`). Кеш PDF оновлюється за віком (`AggressorServices_max_age_hours`), а не назавжди — на відміну від `GetPrescript` і `PlaycityParser`, де кожен документ незмінний.
   - `PlaycityParser`: Парсить PDF-рішення НКЕК за списком URL із `urlPdfs`; підтримує `file:` для читання URL зі зовнішнього файлу.
   - `BlockedObjects`: Формує список заблокованих доменів, записує атомарно.
   - `BlockedDomain`/`BlockedDomainComparator`: Зберігає та сортує домени.
@@ -261,6 +268,9 @@ SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,ap
 **Чому PDF із сервісів агресора не завантажується?**  
 Переконайтеся, що `urlAggressorServices` і `AggressorServices_SOURCE_DOMAIN` у `cip.gov.ua.properties` коректні. Логи вкажуть на проблему (наприклад, 404).
 
+**Як зрозуміти, чи перелік сервісів агресора актуальний, а не застарілий кеш?**  
+Дивіться в лог одне з трьох повідомлень: `Downloaded fresh PDF` (щойно оновлено), `Cached PDF is still fresh … skipping download` (кеш ще не застарів, усе гаразд) або `Failed to refresh stale cached PDF, falling back to on-disk copy` (сервер недоступний, використано застарілу копію — варто перевірити мережу чи сам сайт nrada.gov.ua). Термін придатності задається `AggressorServices_max_age_hours` (типово 24 години).
+
 **Як вимкнути логування у файл?**  
 Відредагуйте `logback.xml`, прибравши `<appender-ref ref="FILE" />` із потрібних логерів.
 
@@ -287,6 +297,28 @@ Apache License 2.0. Див. [LICENSE](LICENSE) та [NOTICE](NOTICE).
 ---
 
 ## Version History
+
+**Version 3.2.1**
+
+- Виправлено критичний баг: `AggressorServicesParser` роками парсив
+  застарілий PDF. Сайт `webportal.nrada.gov.ua` перевидає перелік сервісів
+  держави-агресора під новим датованим іменем файлу щоразу, коли оновлює
+  його, а локальний кеш зберігався під одним фіксованим іменем
+  (`AggressorServices_PRIMARY_PDF_NAME`) — тож жодне оновлення переліку не
+  потрапляло в `blocked.result.txt` після першого успішного завантаження.
+  Виявлено після перевірки НКЕК, яка зафіксувала незаблоковані домени з
+  оновленого переліку (25.06.2026).
+- Додано термін придатності кешу: `AggressorServices_max_age_hours` (типово
+  24 години). Застарілий кеш пробує оновитися щоразу; якщо сервер
+  недоступний — використовується наявна застаріла копія (принцип «стійкість
+  важливіша за швидке падіння»), а не провал джерела.
+- Логи тепер чітко розрізняють три випадки для кешу PDF: `Downloaded fresh
+  PDF`, `Cached PDF is still fresh … skipping download`, `Failed to refresh
+  stale cached PDF, falling back to on-disk copy`.
+- Виправлено потенційний `FileAlreadyExistsException` при заміні кешованого
+  PDF: `Files.move()` тепер завжди поєднує `ATOMIC_MOVE` з `REPLACE_EXISTING`.
+- `PlaycityParser` (рішення НКЕК) поведінки не змінює — кожен документ
+  незмінний і кешується за власним URL назавжди.
 
 **Version 3.2.0**
 

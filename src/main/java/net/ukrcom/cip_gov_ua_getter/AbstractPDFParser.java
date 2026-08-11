@@ -34,7 +34,10 @@ import java.security.cert.X509Certificate;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -177,30 +180,76 @@ public abstract class AbstractPDFParser {
         }
     }
 
-    protected void downloadPdf(String pdfUrl, String destinationPath) throws IOException {
+    /**
+     * Завантажує PDF за URL у вказаний файл.
+     * <p>
+     * Якщо {@code maxAge} відсутній ({@code null}) і файл уже є на диску —
+     * вважаємо його незмінним історичним документом (як рішення НКЕК за
+     * унікальним URL) і завантаження пропускаємо назавжди.
+     * <p>
+     * Якщо {@code maxAge} задано — файл придатний, поки не застаріє. Щойно
+     * його вік перевищує {@code maxAge}, наступний запуск пробує оновити
+     * його з сервера. Це потрібно для джерел на кшталт переліку сервісів
+     * держави-агресора: сайт публікує «поточний стан» під новим іменем
+     * файлу щоразу, коли його оновлює, а локальний кеш зберігається під
+     * одним фіксованим іменем — без оновлення за віком зміни на сайті
+     * ніколи не потрапляли б у результат.
+     * <p>
+     * Якщо спроба оновлення не вдалася (мережа, сервер недоступний), а
+     * застаріла копія вже є на диску — не провалюємо джерело: лишаємо стару
+     * копію і повертаємось без винятку, лише з попередженням у лог. Це
+     * узгоджується з принципом «стійкість важливіша за швидке падіння» —
+     * застарілий перелік кращий за відсутній.
+     *
+     * @param pdfUrl адреса PDF
+     * @param destinationPath шлях, куди зберегти
+     * @param maxAge максимальний вік кешу; {@code null} — кешувати назавжди
+     * @throws IOException у разі помилки мережі чи запису, якщо відкотитися
+     * на стару копію неможливо (її просто немає)
+     */
+    protected void downloadPdf(String pdfUrl, String destinationPath, Duration maxAge) throws IOException {
         Path destPath = Paths.get(destinationPath);
-        if (Files.exists(destPath)) {
-            logger.debug("PDF already exists: {}", destPath);
-            return;
+        boolean cacheExists = Files.exists(destPath);
+
+        if (cacheExists) {
+            if (maxAge == null) {
+                logger.debug("PDF cached indefinitely, skipping download: {}", destPath);
+                return;
+            }
+            Duration age = Duration.between(Files.getLastModifiedTime(destPath).toInstant(), Instant.now())
+                    .truncatedTo(ChronoUnit.SECONDS);
+            if (age.compareTo(maxAge) < 0) {
+                logger.info("Cached PDF is still fresh (age {}, max {}), skipping download: {}", age, maxAge, destPath);
+                return;
+            }
+            logger.debug("Cached PDF is stale (age {}, max {}), attempting refresh: {}", age, maxAge, destPath);
         }
+
         Files.createDirectories(destPath.getParent());
         Path tempPath = destPath.resolveSibling(destPath.getFileName() + ".tmp");
         try {
-            downloadViaConnection(pdfUrl, tempPath, null);
-        } catch (SSLException e) {
-            logger.warn("SSL verification failed for {}, retrying with per-connection SSL bypass: {}", pdfUrl, e.getMessage());
-            Files.deleteIfExists(tempPath);
-            downloadViaConnection(pdfUrl, tempPath, createTrustAllSslSocketFactory());
+            try {
+                downloadViaConnection(pdfUrl, tempPath, null);
+            } catch (SSLException e) {
+                logger.warn("SSL verification failed for {}, retrying with per-connection SSL bypass: {}", pdfUrl, e.getMessage());
+                Files.deleteIfExists(tempPath);
+                downloadViaConnection(pdfUrl, tempPath, createTrustAllSslSocketFactory());
+            }
         } catch (IOException e) {
             Files.deleteIfExists(tempPath);
+            if (cacheExists) {
+                logger.warn("Failed to refresh stale cached PDF, falling back to on-disk copy: {} ({})",
+                        destPath, e.getMessage());
+                return;
+            }
             throw e;
         }
         try {
-            Files.move(tempPath, destPath, StandardCopyOption.ATOMIC_MOVE);
+            Files.move(tempPath, destPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException e) {
             Files.move(tempPath, destPath, StandardCopyOption.REPLACE_EXISTING);
         }
-        logger.debug("Downloaded PDF to: {}", destPath);
+        logger.info("Downloaded fresh PDF: {}", destPath);
     }
 
     private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException {
@@ -239,9 +288,11 @@ public abstract class AbstractPDFParser {
      * конвеєрів працює далі.
      *
      * @param targets мапа «URL → шлях, куди зберегти»
+     * @param maxAge максимальний вік кешу для кожного PDF; {@code null} —
+     * кешувати назавжди (див. {@link #downloadPdf})
      * @return об'єднаний перелік доменів з усіх PDF
      */
-    protected Set<BlockedDomain> downloadAndExtractAll(Map<String, Path> targets) {
+    protected Set<BlockedDomain> downloadAndExtractAll(Map<String, Path> targets, Duration maxAge) {
         Set<BlockedDomain> domains = new TreeSet<>(new BlockedDomainComparator());
         if (targets.isEmpty()) {
             return domains;
@@ -258,8 +309,7 @@ public abstract class AbstractPDFParser {
                 futures.add(executor.submit(() -> {
                     downloadLimit.acquire();
                     try {
-                        downloadPdf(url, path.toString());
-                        logger.info("Successfully downloaded PDF from {} to {}", url, path);
+                        downloadPdf(url, path.toString(), maxAge);
                     } finally {
                         downloadLimit.release();
                     }
