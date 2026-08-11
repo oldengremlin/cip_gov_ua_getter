@@ -46,6 +46,195 @@
 - **Кешування**: Локальні файли зменшують кількість запитів до API.
 - **Конфігурація**: Налаштування через `cip.gov.ua.properties` (шляхи, User-Agent, вхідні/вихідні файли, URL сервісів агресора).
 
+## Архітектура
+
+### Загальний потік виконання
+
+```mermaid
+flowchart TD
+    Start(["main(args)"]) --> Init["Ініціалізація:<br/>аргументи, cip.gov.ua.properties,<br/>ban/unban_keywords"]
+    Init --> BaseList["BlockedObjects.getBlockedDomainNames()<br/>читає базові списки з файлів blocked"]
+
+    subgraph Prescripts ["processPrescripts() — розпорядження НЦУ"]
+        direction TB
+        Session["BrowserSession<br/>один Chromium на весь етап"] --> CGU["CGUGetter<br/>JSON зі списком розпоряджень<br/>(до 3 повторів)"]
+        CGU --> CGUOk{"Отримано?"}
+        CGUOk -- "так" --> Posts["Для кожного поста (послідовно):<br/>фільтр за ban/unban_keywords →<br/>для кожного вкладення GetPrescript →<br/>DomainValidatorUtil"]
+    end
+
+    BaseList --> Session
+    CGUOk -- "ні, після 3 спроб" --> Abort["Перервати запуск.<br/>storeState() НЕ викликати —<br/>лишити попередній результат недоторканим"]
+    Posts --> Isolated
+
+    subgraph Isolated ["Ізольовані джерела (збій одного не зупиняє інші)"]
+        direction LR
+        Aggr["AggressorServicesParser<br/>webportal.nrada.gov.ua<br/>кеш із TTL 24 год"] --> Nkek["PlaycityParser<br/>рішення НКЕК за urlPdfs<br/>кеш назавжди"]
+    end
+
+    Isolated --> Store["BlockedObjects.storeState()<br/>атомарний запис blocked.result.txt"]
+    Store --> End(["Кінець"])
+```
+
+Два ключові рішення для стійкості видно прямо на діаграмі:
+
+- Якщо не вдалося отримати сам перелік розпоряджень (`CGUGetter`) — запуск переривається, а `storeState()` свідомо **не** викликається, щоб не перезаписати робочий `blocked.result.txt` неповними даними.
+- `AggressorServicesParser` і `PlaycityParser` ізольовані одне від одного і від решти потоку: збій одного джерела не заважає обробити інше й зберегти результат.
+
+### Структура класів
+
+```mermaid
+classDiagram
+    class Cip_gov_ua_getter {
+        <<orchestrator>>
+        +main(args) void
+        -processPrescripts()
+        -processPost()
+        -processAttachment()
+        -collectFrom(name, factory, bo)
+        -setFileDate(file, dateStr)
+    }
+
+    class BrowserSession {
+        <<AutoCloseable>>
+        -Browser browser
+        -BrowserContext jsonContext
+        -BrowserContext textContext
+        +newJsonPage() Page
+        +newTextPage() Page
+        +reset() void
+        +close() void
+    }
+
+    class CGUGetter {
+        -String urlArticles
+        +CGUGetter(prop, session)
+        +getJsonBody() String
+    }
+
+    class ParseCGUArticlesJson {
+        -JSONArray posts
+        +getPosts() JSONArray
+    }
+
+    class GetPrescript {
+        -String id
+        -String bodyPrescript
+        -Path storePrescriptTo
+        +getPrescriptFrom() GetPrescript
+        +storePrescriptTo() GetPrescript
+        +getBodyPrescript() String[]
+        +setOrigFileName(name) GetPrescript
+        +isLocalRead() boolean
+    }
+
+    class AbstractPDFParser {
+        <<abstract>>
+        #Path manualDir
+        #String sourceDomain
+        +parse()* Set~BlockedDomain~
+        #downloadPdf(url, path, maxAge)
+        #downloadAndExtractAll(targets, maxAge) Set~BlockedDomain~
+        #extractDomainsFromPDF(path) Set~BlockedDomain~
+        #createTrustAllSslSocketFactory() SSLSocketFactory
+    }
+
+    class AggressorServicesParser {
+        -String primaryPdfName
+        -Duration maxAge
+        +parse() Set~BlockedDomain~
+        -findPdfUrl(url) String
+    }
+
+    class PlaycityParser {
+        -String[] urlPdfs
+        +parse() Set~BlockedDomain~
+    }
+
+    class DomainValidatorUtil {
+        <<utility>>
+        +validateDomain(...)$ Set~String~
+    }
+
+    class BlockedObjects {
+        -TreeSet~BlockedDomain~ blockedDomains
+        +getBlockedDomainNames() BlockedObjects
+        +addBlockedDomainName(bd) boolean
+        +storeState() BlockedObjects
+    }
+
+    class BlockedDomain {
+        <<immutable>>
+        -String domainName
+        -boolean isBlocked
+        -LocalDateTime dateTime
+        +getDomainName() String
+        +getIsBlocked() boolean
+        +getDateTime() LocalDateTime
+    }
+
+    class BlockedDomainComparator {
+        +compare(d1, d2) int
+    }
+
+    AbstractPDFParser <|-- AggressorServicesParser
+    AbstractPDFParser <|-- PlaycityParser
+    AbstractPDFParser ..> DomainValidatorUtil : використовує
+    GetPrescript ..> DomainValidatorUtil : використовує
+
+    Cip_gov_ua_getter --> BrowserSession : створює
+    Cip_gov_ua_getter --> BlockedObjects : створює
+    Cip_gov_ua_getter --> CGUGetter : створює
+    Cip_gov_ua_getter --> ParseCGUArticlesJson : створює
+    Cip_gov_ua_getter --> GetPrescript : створює
+    Cip_gov_ua_getter --> AggressorServicesParser : створює
+    Cip_gov_ua_getter --> PlaycityParser : створює
+
+    CGUGetter --> BrowserSession : використовує
+    GetPrescript --> BrowserSession : використовує
+
+    BlockedObjects o-- BlockedDomain : містить
+    BlockedObjects ..> BlockedDomainComparator : сортує через
+    BlockedDomainComparator ..> BlockedDomain : порівнює
+```
+
+`AbstractPDFParser` — спільна база для обох PDF-парсерів: завантаження з
+per-connection SSL bypass, атомарний запис, паралельний конвеєр
+завантаження+розбору. `AggressorServicesParser` і `PlaycityParser`
+відрізняються лише тим, *звідки* беруть перелік PDF і чи має кеш термін
+придатності (`Duration maxAge`).
+
+### Паралельна обробка PDF
+
+`AbstractPDFParser.downloadAndExtractAll()`, якою користуються обидва
+PDF-парсери, якщо документів декілька (наприклад, кілька рішень НКЕК за
+один запуск) — кожен проходить власний конвеєр «завантажити → розібрати»
+на віртуальних потоках JDK 21, без бар'єра між фазами:
+
+```mermaid
+flowchart LR
+    In["Map&lt;URL, Path&gt; targets<br/>(один запис на PDF)"] --> Fan["Executors.newVirtualThreadPerTaskExecutor()<br/>по одному завданню на кожен PDF"]
+
+    subgraph Task ["Завдання для одного PDF (так виконує кожен із targets.size() віртуальних потоків)"]
+        direction TB
+        D1{"Семафор завантаження<br/>DOWNLOAD_PERMITS = 3"}
+        D1 -->|acquire| D2["downloadPdf()<br/>мережа: HTTP(S) або кеш"]
+        D2 --> D3["release"]
+        D3 --> P1{"Семафор розбору<br/>PARSE_PERMITS = 12"}
+        P1 -->|acquire| P2["extractDomainsFromPDF()<br/>PDFBox + регекс, CPU-bound"]
+        P2 --> P3["release"]
+    end
+
+    Fan --> Task
+    P3 --> Out["Future&lt;Set&lt;BlockedDomain&gt;&gt;"]
+    Out --> Join["Основний потік: послідовно future.get()<br/>і об'єднує в один TreeSet"]
+```
+
+Дві окремі квоти обмежують навантаження незалежно одна від одної: не
+більш як 3 одночасних мережевих завантаження (джерела — держсайти, більше
+не потрібно) і не більш як 12 одночасних розборів PDFBox (обмежено
+пам'яттю — документ тримається в купі повністю). Збій одного файлу
+логується й не зупиняє решту конвеєрів.
+
 ## Встановлення
 
 1. **Вимоги**:
@@ -104,13 +293,13 @@
    - Звичайний режим:
 
      ```bash
-     java -jar target/cip_gov_ua_getter-3.0-all.jar
+     java -jar target/cip_gov_ua_getter-3.2.1-all.jar
      ```
 
    - Дебаг-режим:
 
      ```bash
-     java -jar target/cip_gov_ua_getter-3.0-all.jar -d
+     java -jar target/cip_gov_ua_getter-3.2.1-all.jar -d
      ```
 
 3. **Результати**:
@@ -133,10 +322,10 @@
 - Лог із `-d`:
 
   ```
-  2025-04-16 10:00:00 INFO  n.u.cip_gov_ua_getter - Fetching prescript for ID 68502 from server
-  2025-04-16 10:00:00 DEBUG n.u.cip_gov_ua_getter - Blocked static resource: https://cip.gov.ua/content/css/loading.css
-  2025-04-16 10:00:00 INFO  n.u.cip_gov_ua_getter - Successfully downloaded PDF to: /home/olden/.../MANUAL/Perelik.#450.2023.07.06.pdf
-  2025-04-16 10:00:01 INFO  n.u.cip_gov_ua_getter - Successfully stored blocked domains to blocked.result.txt
+  2026-08-11 10:00:00 INFO  n.u.cip_gov_ua_getter.GetPrescript - Fetching prescript for ID 68502 from server
+  2026-08-11 10:00:00 DEBUG n.u.cip_gov_ua_getter.BrowserSession - Blocked static resource: https://cip.gov.ua/content/css/loading.css
+  2026-08-11 10:00:00 INFO  n.u.c.AbstractPDFParser - Downloaded fresh PDF: /home/olden/.../MANUAL/Perelik.#450.2023.07.06.pdf
+  2026-08-11 10:00:01 INFO  n.u.cip_gov_ua_getter.BlockedObjects - Successfully stored blocked domains to blocked.result.txt
   ```
 
 ### Конфігурація логування
@@ -291,192 +480,19 @@ SERVICE_SUBDOMAINS=www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,ap
 Apache License 2.0. Див. [LICENSE](LICENSE) та [NOTICE](NOTICE).  
 Пояснення українською: [LICENSE-UKR.md](LICENSE-UKR.md).
 
+## Пов'язані проєкти
+
+- [AS12593-BLOCK](https://github.com/oldengremlin/AS12593-BLOCK.git) —
+  практичне застосування результатів цієї утиліти: конфігурація й
+  результати роботи `cip_gov_ua_getter` для конкретного AS.
+- [ASBlockWar](https://github.com/oldengremlin/asblockwar.git) — суміжний
+  проєкт, над яким ведеться паралельна робота.
+
+## Історія змін
+
+Повний перелік змін за версіями — у [CHANGELOG.md](CHANGELOG.md).
+
 ## Контакти
 
 Питання, баги, ідеї? Відкривайте [issues](https://github.com/oldengremlin/cip_gov_ua_getter/issues) в репозиторії.
 
----
-
-## Version History
-
-**Version 3.2.1**
-
-- Виправлено критичний баг: `AggressorServicesParser` роками парсив
-  застарілий PDF. Сайт `webportal.nrada.gov.ua` оновлює перелік сервісів
-  держави-агресора по-різному — інколи під новим датованим іменем файлу,
-  інколи вміст під тим самим іменем, — а локальний кеш зберігався під одним
-  фіксованим іменем (`AggressorServices_PRIMARY_PDF_NAME`) незалежно від
-  того, що відбувалося на сервері. Тож жодне оновлення переліку не
-  потрапляло в `blocked.result.txt` після першого успішного завантаження.
-  Виявлено після перевірки НКЕК, яка зафіксувала незаблоковані домени з
-  оновленого переліку (25.06.2026).
-- Додано термін придатності кешу: `AggressorServices_max_age_hours` (типово
-  24 години). Застарілий кеш пробує оновитися щоразу; якщо сервер
-  недоступний — використовується наявна застаріла копія (принцип «стійкість
-  важливіша за швидке падіння»), а не провал джерела.
-- Логи тепер чітко розрізняють три випадки для кешу PDF: `Downloaded fresh
-  PDF`, `Cached PDF is still fresh … skipping download`, `Failed to refresh
-  stale cached PDF, falling back to on-disk copy`.
-- Виправлено потенційний `FileAlreadyExistsException` при заміні кешованого
-  PDF: `Files.move()` тепер завжди поєднує `ATOMIC_MOVE` з `REPLACE_EXISTING`.
-- `PlaycityParser` (рішення НКЕК) поведінки не змінює — кожен документ
-  незмінний і кешується за власним URL назавжди.
-
-**Version 3.2.0**
-
-- Додано парсинг рішень НКЕК (`PlaycityParser`):
-  - Нова властивість `urlPdfs` — перелік PDF-посилань через кому.
-  - Підтримка `file:/шлях` — URL завантажуються зі зовнішнього текстового файлу (по одному на рядок, `#` — коментарі, `~` → домашня директорія).
-  - Відсутній або нечитабельний файл → `WARN` у лог, без падіння.
-  - Некоректні рядки (не `http://`/`https://`) → `WARN` і пропуск.
-  - Ім'я кешованого PDF-файлу обрізається до 200 символів (зберігається кінець, найбільш унікальна частина).
-- Підвищено стійкість до мережевих і системних збоїв:
-  - `CGUGetter`: 3 автоматичні повтори з паузою 3 с при `ERR_NETWORK_CHANGED` та інших помилках.
-  - `GetPrescript.fetchPrescriptWithRetry`: ловить `RuntimeException` (Playwright) на рівні з `IOException`.
-  - `GetPrescript.getPrescriptFrom`: більше не перекидає `RuntimeException` — логує `WARN` і повертає `this`.
-  - Кожен пост у головному циклі огорнутий `try-catch(Exception)` — збій одного поста не зупиняє решту.
-  - `AggressorServicesParser` і `PlaycityParser` ізольовані — збій парсера не скасовує `bo.storeState()`.
-  - `PatternSyntaxException` захищає від некоректних регулярних виразів у `ban_keywords`/`unban_keywords`.
-- Виправлено потенційні вразливості:
-  - `BlockedDomain.setDateTime`: `OffsetDateTime`-fallback для дат із часовим поясом (напр. `Z`-суфікс).
-  - `AbstractPDFParser.downloadViaConnection`: таймаути 15 с (connect) / 60 с (read).
-  - `AbstractPDFParser.downloadPdf`: атомарний запис PDF через `.tmp` + rename.
-  - `GetPrescript`: `NumberFormatException`-захист для `max_file_size_bytes`; `null`-перевірка `response.body()`; `IllegalArgumentException` у retry-блоці `storePrescriptTo`; `split("\\R")` замість `split("\n")` для Windows CRLF; `null`-перевірка scheme/host при побудові `baseUrl`.
-  - `AggressorServicesParser.findPdfUrl`: коректна обробка protocol-relative URL (`//example.com`).
-
-**Version 3.1.7**
-
-- Покращено обробку довгих імен файлів у `GetPrescript`:
-  - У `setOrigFileName` додано обрізку до останнього пробілу, щоб уникнути обрізаних слів (наприклад, `зах` → `обмежувальних`).
-  - Додано `...` перед розширенням для обрізаних імен (наприклад, `...обмежувальних....pdf`).
-  - Додано перевірку на заборонені символи (`\/:*?"<>|`) з заміною на `id_prescript.ext`.
-  - У `trimToUtf8Bytes` додано підтримку сурогатних пар (емодзі, рідкісні символи).
-- Покращено `storePrescriptTo`:
-  - Збільшено ліміт вільного місця до `MAX_FILE_SIZE_BYTES_DEFAULT * 2` (~31.5 МБ).
-  - Додано логування стеку `IOException` у дебаг-режимі.
-- Покращено логування:
-  - У `executeAjaxRequest` змінено `logger.warn` на `logger.debug` для `File size` і `dataUrl length`.
-  - У `trimToUtf8Bytes` збережено детальне логування з оригінальним рядком.
-- Додано рекомендацію: використовувати скрипт для чистки дублів у кеші:
-  ```bash
-  for id in $(ls *~*.pdf | cut -d'~' -f1 | sort | uniq -d); do
-      original=$(ls ${id}~* | grep -E '\.pdf$' | head -n1)
-      ls ${id}~* | grep -v "$original" | xargs -I {} rm -v {}
-  done
-  ```
-- Збережено зчитування `cip.gov.ua.properties` через `InputStream` для сумісності з `\uXXXX`.
-- Додано примітку: для тестування довгих імен запускати з дебаг-режимом (`-d`) і перевіряти логи на `Trimmed inString` і `Cleaned origFileName`.
-- Додано підтримку сурогатних пар (емодзі, рідкісні символи) у `trimToUtf8Bytes` для захисту від незвичайних імен файлів.
-- Покращено `setOrigFileName`:
-  - Обрізка до останнього пробілу для читачних імен (наприклад, `обмежувальних....pdf` замість `зах.pdf`).
-  - Додано `...` перед розширенням.
-  - Обробка невалідних символів (`\/:*?"<>|`) з заміною на `id_prescript.ext` або `.unknown`.
-- Змінено `logger.warn` на `logger.debug` для некритичних повідомлень у `storePrescriptTo` і `executeAjaxRequest`.
-- Підтверджено ефективність bash-скрипта для чистки дублів у кеші.
-
-**Version 3.1.6**
-
-- Виправлено обробку довгих імен файлів у `GetPrescript`:
-  - Додано метод `trimToUtf8Bytes` для обрізки імен файлів до 250 байт у UTF-8, зберігаючи цілісність символів.
-  - Оновлено `setOrigFileName`: обрізається тільки основна частина імені (без розширення), розширення додається без дублювання крапки.
-  - Прибрано агресивні заміни символів (`.replaceAll("[^a-zA-Z0-9а-яА-Я._-]", "_")` і `.replaceAll("\\s+", "_")`), щоб уникнути дублювання файлів у кеші.
-  - Додано дебаг-логування обрізки імен файлів у `trimToUtf8Bytes`.
-- Покращено `storePrescriptTo`:
-  - Додано перевірку вільного місця на диску (мінімум 10 МБ).
-  - Збережено перевірку прав доступу до директорії `./Prescript`.
-  - Додано логування стеку винятку `IOException` у дебаг-режимі.
-- Збережено зчитування `cip.gov.ua.properties` через `InputStream` для простоти і сумісності з `\uXXXX`.
-- Додано примітку в документацію про можливі проблеми з довгими іменами файлів у Linux (обмеження 255 байт у ext4) і рекомендацію вмикати дебаг-режим для діагностики.
-- Рекомендація: перед зміною логіки `setOrigFileName` запускати прогін із дебаг-режимом (`-d`), щоб відстежити зміни імен файлів.
-
-**Version 3.1.5**
-
-- Виправлено збереження PDF-файлів у `GetPrescript`:
-  - Очищення імен файлів: заміна пробілів на `_`, видалення проблемних символів, обрізання до 100 символів із збереженням розширення.
-  - Додано перевірку прав доступу до директорії `./Prescript` і вільного місця на диску.
-  - Покращено логування: додано повний стек винятку в дебаг-режимі, точна причина помилки (наприклад, "Directory not writable") записується в `failed_ids.txt`.
-  - Виняток `IOException` у `FileOutputStream` тепер детально логуюється для діагностики.
-- Залишено зчитування `cip.gov.ua.properties` через `InputStream`:
-  - Підтверджено, що `\uXXXX` декодується коректно для `ban_keywords` і `unban_keywords`.
-  - Додано примітку в документацію: для UTF-8 без ескейпів можна перейти на `InputStreamReader`.
-- Збережено дефолтний ліміт `max_file_size_bytes` на 15 МБ.
-- Додано примітку про можливі проблеми з довгими іменами файлів у Linux (обмеження 255 байт).
-
-**Version 3.1.4**
-
-- Виправлено обробку кирилиці в `cip.gov.ua.properties`:
-  - Використовується `InputStreamReader` із UTF-8 для коректного декодування `\uXXXX` (Unicode-ескейпів) при редагуванні в NetBeans.
-  - `ban_keywords` і `unban_keywords` тепер працюють із кирилицею, навіть якщо збережені як `\uXXXX`.
-- Виправлено збереження PDF-файлів у `GetPrescript`:
-  - Додано потокове завантаження через `page.request().get()` для бінарних файлів.
-  - Покращено логування: точна причина помилки (наприклад, "File too large") записується в логи і `failed_ids.txt`.
-  - Збільшено дефолтний ліміт `max_file_size_bytes` до 15 МБ.
-- Додано коментар у `cip.gov.ua.properties` про `\uXXXX` при редагуванні в IDE.
-- Перенесено ключові слова для фільтрації постів у `cip.gov.ua.properties`:
-  - `ban_keywords`: Слова для постів про блокування (наприклад, `блокування|обмеження доступу|реалізацію.*обмежувальних`).
-  - `unban_keywords`: Слова для постів про розблокування (наприклад, `розблокування|припинення тимчасового`).
-  - Роздільник: `|`.
-- Додано підтримку параметра `max_file_size_bytes` у `cip.gov.ua.properties` (дефолт: 15 МБ).
-- Збережено фільтрацію за "блокування" та "обмеження доступу".
-- Виправлено баг із пропуском доменів через сторонні символи (наприклад, `nasepravda.cz,` чи `kscm.cz;`).
-- Оновлено `DOMAIN_CLEAN_PATTERN`: додано підтримку подвійних дефісів для Punycode-доменів.
-- Додано кешування TLD у `DomainValidatorUtil` для прискорення перевірки TLD.
-- Збережено повну підтримку Unicode для всіх мов.
-- Підтримка кількох доменів у строці (наприклад, `nasepravda.cz,example.com`).
-- Покращено логування для діагностики.
-
-**Version 3.1.3**
-
-- Перенесено ключові слова для фільтрації постів у `cip.gov.ua.properties`:
-  - `ban_keywords`: Слова для постів про блокування (наприклад, `блокування|обмеження доступу|реалізацію.*обмежувальних`).
-  - `unban_keywords`: Слова для постів про розблокування (наприклад, `розблокування|припинення тимчасового`).
-  - Роздільник: `|`.
-- Додано підтримку параметра `max_file_size_bytes` у `cip.gov.ua.properties` для налаштування максимального розміру файлів (дефолт: 10 МБ).
-- Покращено логування для надто великих файлів у `GetPrescript` із зазначенням розміру.
-- Додано підтримку нових назв розпоряджень із ключовими словами "реалізацію" та "обмежувальних".
-- Збережено фільтрацію за "блокування" та "обмеження доступу".
-- Виправлено баг із пропуском доменів через сторонні символи (наприклад, `nasepravda.cz,` чи `kscm.cz;`).
-- Оновлено `DOMAIN_CLEAN_PATTERN`: додано підтримку подвійних дефісів для Punycode-доменів (наприклад, `xn--b1akbpgy3fwa.xn--p1acf`).
-- Додано кешування TLD у `DomainValidatorUtil` для прискорення перевірки повторюваних TLD (наприклад, `.cz`, `.com`).
-- Збережено повну підтримку Unicode для всіх мов (кирилиця, китайська, арабська тощо).
-- Підтримка кількох доменів у строці (наприклад, `nasepravda.cz,example.com`).
-- Покращено логування для діагностики очищення доменів.
-
-**Version 3.1.2**
-
-- Додано підтримку нових назв розпоряджень із ключовими словами "реалізацію" та "обмежувальних" (наприклад, «Про реалізацію і моніторинг ефективності персональних спеціальних економічних та інших обмежувальних заходів (санкцій)»).
-- Збережено фільтрацію за "блокування" та "обмеження доступу".
-- Виправлено баг із пропуском доменів через сторонні символи (наприклад, `nasepravda.cz,` чи `kscm.cz;`).
-- Оновлено `DOMAIN_CLEAN_PATTERN`: додано підтримку подвійних дефісів для Punycode-доменів (наприклад, `xn--b1akbpgy3fwa.xn--p1acf`).
-- Додано кешування TLD у `DomainValidatorUtil` для прискорення перевірки повторюваних TLD (наприклад, `.cz`, `.com`).
-- Збережено повну підтримку Unicode для всіх мов (кирилиця, китайська, арабська тощо).
-- Підтримка кількох доменів у строці (наприклад, `nasepravda.cz,example.com`).
-- Покращено логування для діагностики очищення доменів.
-
-**Version 3.1.1**
-
-- Виправлено баг із пропуском доменів через сторонні символи (наприклад, `nasepravda.cz,` чи `kscm.cz;`).
-- Оновлено `DOMAIN_CLEAN_PATTERN`: додано підтримку подвійних дефісів для Punycode-доменів (наприклад, `xn--b1akbpgy3fwa.xn--p1acf`).
-- Додано кешування TLD у `DomainValidatorUtil` для прискорення перевірки повторюваних TLD (наприклад, `.cz`, `.com`).
-- Збережено повну підтримку Unicode для всіх мов (кирилиця, китайська, арабська тощо).
-- Підтримка кількох доменів у строці (наприклад, `nasepravda.cz,example.com`).
-- Покращено логування для діагностики очищення доменів.
-
-**Version 3.1**
-
-- Уніфіковано валідацію доменів через `DomainValidatorUtil`.
-- Оптимізовано обробку шляхів із `java.nio.file.Path`.
-- Покращено логування: прибрано надлишкові дебаг-повідомлення, додано вивід у `logs/cip_gov_ua_getter.log`.
-- Зберігаємо KISS: чистий код, прозора логіка. 😎
-
-**Version 3.0 (2025-04-16)**
-
-- Додано парсинг сервісів держави-агресора з `webportal.nrada.gov.ua`, домени додаються до `blocked.result.txt`.
-- Уніфіковано обробку гомогліфів із використанням `SpoofChecker`.
-
-**Version 2.4 (2025-04-16)**
-
-- Додано блокування статичних ресурсів (`.jpg`, `.jpeg`, `.png`, `.svg`, `.woff2`, `.css`).
-- Покращено продуктивність: ~6 секунд для кешованих запусків.
-- Додано дебаг-режим із детальними логами (`-d`).
-- Оптимізовано логування: чисті логи на `INFO`, деталі на `DEBUG`.
