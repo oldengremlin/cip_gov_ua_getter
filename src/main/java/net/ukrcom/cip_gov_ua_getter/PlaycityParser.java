@@ -112,7 +112,13 @@ public class PlaycityParser extends AbstractPDFParser {
             }
         }
 
-        return downloadAndExtractAll(targets);
+        // Кожен URL тут — окреме, незмінне рішення НКЕК, а не «поточний стан»,
+        // що перевидається під новим іменем: локальне ім'я кешу похідне від
+        // самого URL, тож нове рішення природно завантажується під новим
+        // файлом. Кешування назавжди (maxAge = null) тут коректне — на
+        // відміну від переліку сервісів держави-агресора, перевіряти вік не
+        // потрібно.
+        return downloadAndExtractAll(targets, null);
     }
 
     @Override
