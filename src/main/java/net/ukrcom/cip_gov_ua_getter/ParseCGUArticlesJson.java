@@ -42,7 +42,8 @@ public class ParseCGUArticlesJson {
      * Повертаємо масив з розібраними й відокремленими один від одного
      * розпорядженнями, для подальшого аналізу.
      *
-     * @return @throws JSONException
+     * @return масив розпоряджень
+     * @throws JSONException якщо структура JSON некоректна
      */
     public JSONArray getPosts() throws JSONException {
         return this.posts;
