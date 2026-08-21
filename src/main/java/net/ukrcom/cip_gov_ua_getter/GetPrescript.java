@@ -25,7 +25,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URI;
@@ -34,7 +33,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
@@ -65,6 +63,7 @@ public class GetPrescript {
     // SpoofChecker для обробки гомогліфів
     private static final SpoofChecker SPOOF_CHECKER;
     private boolean localRead;
+    private String cachedFileName;
     
     static {
         SpoofChecker.Builder builder = new SpoofChecker.Builder();
@@ -84,45 +83,17 @@ public class GetPrescript {
                 "urlPrescript",
                 "https://cip.gov.ua/services/cm/api/attachment/download?id="
         ).trim().concat(this.id);
-        String storePrescriptToStr = p.getProperty("store_prescript_to", "./Prescript").trim();
-        this.storePrescriptTo = Paths.get(storePrescriptToStr).normalize();
-        try {
-            Files.createDirectories(this.storePrescriptTo);
-            logger.debug("Ensured directory exists: {}", this.storePrescriptTo);
-        } catch (IOException e) {
-            logger.error("Failed to create directory {}: {}", this.storePrescriptTo, e.getMessage(), e);
-            throw new RuntimeException("Cannot create directory: " + this.storePrescriptTo, e);
-        }
+        // Клас створюється на кожне вкладення — сотні разів за запуск, — тому
+        // розбір конфігурації винесено в ConfigUtil із кешуванням: інакше
+        // кожен екземпляр наново створював директорію, наново розбирав
+        // SERVICE_SUBDOMAINS і наново парсив max_file_size_bytes.
+        this.storePrescriptTo = ConfigUtil.ensureDirectory(p.getProperty("store_prescript_to", "./Prescript"));
         this.secChUa = this.prop.getProperty(
                 "secChUa",
                 "\"Chromium\";v=\"129\", \"Not:A-Brand\";v=\"24\", \"Google Chrome\";v=\"129\""
         ).trim();
-        String subdomains = p.getProperty("SERVICE_SUBDOMAINS",
-                "www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test,m");
-        this.serviceSubdomains = Arrays.stream(subdomains.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .filter(s -> {
-                    boolean valid = s.matches("[a-zA-Z0-9-]+");
-                    if (!valid && debug) {
-                        logger.debug("Invalid subdomain skipped: {}", s);
-                    }
-                    return valid;
-                })
-                .toArray(String[]::new);
-        if (serviceSubdomains.length == 0) {
-            logger.warn("No valid service subdomains defined in SERVICE_SUBDOMAINS");
-        }
-        long parsedMax = MAX_FILE_SIZE_BYTES_DEFAULT;
-        try {
-            parsedMax = Long.parseLong(
-                    this.prop.getProperty("max_file_size_bytes", String.valueOf(MAX_FILE_SIZE_BYTES_DEFAULT)).trim()
-            );
-        } catch (NumberFormatException e) {
-            logger.warn("Invalid max_file_size_bytes value, using default: {}", MAX_FILE_SIZE_BYTES_DEFAULT);
-        }
-        this.maxFileSizeBytes = parsedMax;
-        logger.debug("Max file size set to {} bytes", this.maxFileSizeBytes);
+        this.serviceSubdomains = ConfigUtil.serviceSubdomains(p);
+        this.maxFileSizeBytes = ConfigUtil.positiveLong(p, "max_file_size_bytes", MAX_FILE_SIZE_BYTES_DEFAULT);
     }
     
     public GetPrescript getPrescriptFrom() {
@@ -309,67 +280,81 @@ public class GetPrescript {
             return this;
         }
         
-        if (this.mkDir()) {
-            for (int attempt = 1; attempt <= 3; attempt++) {
-                try {
-                    String dataUrl = executeAjaxRequest(true);
-                    logger.debug("dataUrl length: {}", dataUrl.length());
-                    String[] dataParts = dataUrl.split(",", 2);
-                    if (dataParts.length < 2 || dataParts[1].isEmpty()) {
-                        throw new IOException("Unexpected dataUrl format for ID " + id
-                                + ": missing base64 payload (dataUrl length=" + dataUrl.length() + ")");
-                    }
-                    byte[] fileContent = java.util.Base64.getDecoder().decode(dataParts[1]);
-                    logger.debug("fileContent length: {}", fileContent.length);
-                    if (fileContent.length > maxFileSizeBytes) {
-                        logger.debug("File ID {} is too large: {} bytes, max allowed: {} bytes",
-                                id, fileContent.length, maxFileSizeBytes);
-                        try (FileWriter fw = new FileWriter("failed_ids.txt", true)) {
-                            fw.write("ID: " + id + ", Error: File too large (" + fileContent.length + " bytes, max " + maxFileSizeBytes + " bytes)\n");
-                        }
-                        return this;
-                    }
-                    try (FileOutputStream fos = new FileOutputStream(getFileName())) {
-                        fos.write(fileContent);
-                    }
-                    logger.info("Stored prescript {} on attempt {}", this.id, attempt);
+        // Вміст text/plain уже отримано в getPrescriptFrom() — повторно тягнути
+        // той самий файл із сервера немає сенсу. Раніше кожне нове текстове
+        // вкладення завантажувалося двічі (плюс дві навігації на головну
+        // cip.gov.ua), що вдвічі роздувало «холодний» запуск і стук в анти-бот.
+        if (bodyPrescript != null && "text/plain".equalsIgnoreCase(mimeType)) {
+            byte[] content = bodyPrescript.getBytes(StandardCharsets.UTF_8);
+            if (content.length > maxFileSizeBytes) {
+                logger.debug("File ID {} is too large: {} bytes, max allowed: {} bytes",
+                        id, content.length, maxFileSizeBytes);
+                writeFailedId("File too large (" + content.length + " bytes, max " + maxFileSizeBytes + " bytes)");
+                return this;
+            }
+            try {
+                AtomicFiles.write(Paths.get(getFileName()), content);
+                logger.info("Stored prescript {} from already fetched content", this.id);
+            } catch (IOException e) {
+                logger.error("Failed to store prescript {}: {}", this.id, e.getMessage());
+                writeFailedId("Failed to store: " + e.getMessage());
+            }
+            return this;
+        }
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                String dataUrl = executeAjaxRequest(true);
+                logger.debug("dataUrl length: {}", dataUrl.length());
+                String[] dataParts = dataUrl.split(",", 2);
+                if (dataParts.length < 2 || dataParts[1].isEmpty()) {
+                    throw new IOException("Unexpected dataUrl format for ID " + id
+                            + ": missing base64 payload (dataUrl length=" + dataUrl.length() + ")");
+                }
+                byte[] fileContent = java.util.Base64.getDecoder().decode(dataParts[1]);
+                logger.debug("fileContent length: {}", fileContent.length);
+                if (fileContent.length > maxFileSizeBytes) {
+                    logger.debug("File ID {} is too large: {} bytes, max allowed: {} bytes",
+                            id, fileContent.length, maxFileSizeBytes);
+                    writeFailedId("File too large (" + fileContent.length + " bytes, max " + maxFileSizeBytes + " bytes)");
                     return this;
-                } catch (IOException | IllegalArgumentException e) {
-                    logger.warn("Store attempt {} failed for ID {}: {}", attempt, this.id, e.getMessage());
-                    if (attempt == 3) {
-                        logger.error("Failed to store prescript {} after 3 attempts", this.id);
-                        try (FileWriter fw = new FileWriter("failed_ids.txt", true)) {
-                            fw.write("ID: " + this.id + ", Error: Failed to store after 3 attempts\n");
-                        } catch (IOException ex) {
-                            logger.warn("Failed to write to failed_ids.txt for ID {}: {}", this.id, ex.getMessage());
-                        }
-                        break;
-                    }
-                    // Мережевий збій міг лишити контекст непридатним — піднімаємо браузер заново
-                    this.session.reset();
-                    try {
-                        Thread.sleep(1000 + (long) (Math.random() * 1000));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
+                }
+                AtomicFiles.write(Paths.get(getFileName()), fileContent);
+                logger.info("Stored prescript {} on attempt {}", this.id, attempt);
+                return this;
+            } catch (IOException | IllegalArgumentException e) {
+                logger.warn("Store attempt {} failed for ID {}: {}", attempt, this.id, e.getMessage());
+                if (attempt == 3) {
+                    logger.error("Failed to store prescript {} after 3 attempts", this.id);
+                    writeFailedId("Failed to store after 3 attempts");
+                    break;
+                }
+                // Мережевий збій міг лишити контекст непридатним — піднімаємо браузер заново
+                this.session.reset();
+                try {
+                    Thread.sleep(1000 + (long) (Math.random() * 1000));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                 }
             }
-        } else {
-            logger.error("Failed to create directory for ID {}: {}", id, storePrescriptTo);
         }
         return this;
     }
     
-    protected boolean mkDir() {
-        try {
-            Files.createDirectories(storePrescriptTo);
-            return true;
+    /**
+     * Дописує причину невдачі у {@code failed_ids.txt}. Сам збій запису в цей
+     * файл не має нічого зупиняти — лише потрапляє в лог.
+     *
+     * @param reason опис помилки
+     */
+    private void writeFailedId(String reason) {
+        try (FileWriter fw = new FileWriter("failed_ids.txt", true)) {
+            fw.write("ID: " + this.id + ", Error: " + reason + "\n");
         } catch (IOException e) {
-            logger.warn("Failed to create directory {}: {}", storePrescriptTo, e.getMessage());
-            return false;
+            logger.warn("Failed to write to failed_ids.txt for ID {}: {}", this.id, e.getMessage());
         }
     }
-    
+
     protected boolean isExists(String fn) {
         File f = new File(fn);
         logger.debug("isExists ⮕ ({}, {})", f.exists(), f.canRead());
@@ -379,6 +364,7 @@ public class GetPrescript {
     public GetPrescript setOrigFileName(String fileName) {
         if (fileName == null) {
             this.origFileName = null;
+            this.cachedFileName = null;
             return this;
         }
         String ext = "";
@@ -415,6 +401,7 @@ public class GetPrescript {
         }
         
         this.origFileName = cleanedName;
+        this.cachedFileName = null;
         logger.debug("Cleaned origFileName to {} for ID {}", this.origFileName, id);
         return this;
     }
@@ -459,11 +446,20 @@ public class GetPrescript {
         return this.origFileName;
     }
     
+    /**
+     * Шлях до локального файлу вкладення. Обчислюється один раз: раніше
+     * кожен виклик (а їх 3–4 на вкладення) робив ще й {@code isExists()} —
+     * тобто зайві звернення до файлової системи всередині геттера.
+     *
+     * @return шлях до файлу
+     */
     public String getFileName() {
-        Path filePath = storePrescriptTo.resolve(this.id + "~" + (origFileName != null ? origFileName : this.id + "_prescript.txt"));
-        String fileName = filePath.toString();
-        logger.debug("getFileName ⮕ {} ⮕ {}", fileName, isExists(fileName));
-        return fileName;
+        if (cachedFileName == null) {
+            cachedFileName = storePrescriptTo
+                    .resolve(this.id + "~" + (origFileName != null ? origFileName : this.id + "_prescript.txt"))
+                    .toString();
+        }
+        return cachedFileName;
     }
     
     public boolean isLocalRead() {
