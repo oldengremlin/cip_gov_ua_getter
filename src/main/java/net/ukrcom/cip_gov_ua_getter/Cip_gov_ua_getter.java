@@ -37,6 +37,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 /**
@@ -48,6 +50,9 @@ public class Cip_gov_ua_getter {
 
     private static final Logger logger = LoggerFactory.getLogger(Cip_gov_ua_getter.class);
     private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
+
+    /** Ліміт сторінки в urlArticles — потрібен, щоб помітити обрізання переліку. */
+    private static final Pattern PAGE_SIZE = Pattern.compile("[?&]size=(\\d+)");
 
     /**
      * Основний процес.
@@ -183,6 +188,7 @@ public class Cip_gov_ua_getter {
                 logger.warn("No posts found in JSON response");
                 return;
             }
+            warnIfTruncated(prop, posts.length());
 
             for (int i = 0; i < posts.length(); i++) {
                 try {
@@ -191,6 +197,34 @@ public class Cip_gov_ua_getter {
                     logger.error("Error processing post {}: {}", i, e.getMessage(), e);
                 }
             }
+        }
+    }
+
+    /**
+     * Попереджає, якщо кількість отриманих постів уперлася в {@code size} з
+     * {@code urlArticles}.
+     * <p>
+     * API cip.gov.ua не документоване й не має ознаки «є ще сторінки», тож
+     * рівність кількості постів ліміту — єдиний доступний сигнал, що частина
+     * розпоряджень лишилася за межами відповіді. Домени зі старіших
+     * розпоряджень при цьому не зникають із результату, якщо вони є у вхідних
+     * файлах {@code blocked} — але нові домени з необроблених розпоряджень
+     * туди не потраплять.
+     *
+     * @param prop властивості
+     * @param postCount кількість отриманих постів
+     */
+    private static void warnIfTruncated(Properties prop, int postCount) {
+        String url = prop.getProperty("urlArticles", "");
+        Matcher m = PAGE_SIZE.matcher(url);
+        if (!m.find()) {
+            return;
+        }
+        int size = Integer.parseInt(m.group(1));
+        if (postCount >= size) {
+            logger.warn("Received {} posts, which equals the 'size' limit in urlArticles ({}). "
+                    + "The list is probably truncated — increase 'size' to keep processing older prescripts.",
+                    postCount, size);
         }
     }
 

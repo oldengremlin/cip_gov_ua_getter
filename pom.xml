@@ -6,7 +6,7 @@
 
     <groupId>net.ukrcom</groupId>
     <artifactId>cip_gov_ua_getter</artifactId>
-    <version>3.2.2</version>
+    <version>3.3.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -55,6 +55,17 @@
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
             <version>1.22.1</version>
+        </dependency>
+        <!--
+            Потрібна лише заради InternetDomainName з актуальним
+            Public Suffix List: без нього неможливо відрізнити реєстрований
+            домен (shop.com.ua) від публічного суфікса (com.ua), а помилка
+            тут означала б блокування цілої зони.
+        -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>33.4.8-jre</version>
         </dependency>
     </dependencies>
 

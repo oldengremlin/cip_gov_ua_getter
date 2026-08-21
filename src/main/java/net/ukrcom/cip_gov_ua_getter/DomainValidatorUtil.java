@@ -15,6 +15,7 @@
  */
 package net.ukrcom.cip_gov_ua_getter;
 
+import com.google.common.net.InternetDomainName;
 import com.ibm.icu.text.SpoofChecker;
 import org.apache.commons.validator.routines.DomainValidator;
 import org.apache.commons.validator.routines.InetAddressValidator;
@@ -91,15 +92,8 @@ public class DomainValidatorUtil {
                     continue;
                 }
 
-                // Видаляємо субдомени зі списку serviceSubdomains
-                for (String service : serviceSubdomains) {
-                    if (domain.startsWith(service + ".")) {
-                        domain = domain.substring(service.length() + 1);
-                        break;
-                    }
-                }
-
-                // Видаляємо шляхи, порти, параметри
+                // Видаляємо шляхи, порти, параметри — до зрізання субдомену,
+                // щоб перевірка на публічний суфікс бачила чисте ім'я
                 int endIndex = domain.indexOf("/");
                 if (endIndex != -1) {
                     domain = domain.substring(0, endIndex);
@@ -113,6 +107,25 @@ public class DomainValidatorUtil {
                     domain = domain.substring(0, endIndex);
                 }
 
+                // Видаляємо службовий субдомен — але лише якщо після цього
+                // лишиться реєстрований домен. Інакше www.com.ua перетворився б
+                // на com.ua, а це публічний суфікс: заблокувавши його на DNS,
+                // ми поклали б усю зону. Такі імена (shop.com.ua, test.com.ua)
+                // цілком реєстровані й можуть бути законною ціллю блокування,
+                // тому лишаємо їх як є.
+                for (String service : serviceSubdomains) {
+                    if (domain.startsWith(service + ".")) {
+                        String remainder = domain.substring(service.length() + 1);
+                        if (isUnderPublicSuffix(remainder)) {
+                            domain = remainder;
+                        } else {
+                            logger.debug("Keeping {} as is: stripping '{}' would leave public suffix '{}'",
+                                    domain, service, remainder);
+                        }
+                        break;
+                    }
+                }
+
                 // Пропускаємо sourceDomain, якщо він є
                 if (sourceDomain != null && domain.equals(sourceDomain)) {
                     logger.warn("Skipping source domain: {}", domain);
@@ -123,6 +136,13 @@ public class DomainValidatorUtil {
                 String idnDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
                 if (idnDomain.length() > 255) {
                     logger.warn("Skipping domain after IDN conversion due to length: {}", idnDomain);
+                    continue;
+                }
+
+                // Останній запобіжник: публічний суфікс не може бути ціллю
+                // блокування — це не сайт, а ціла зона (com.ua, kiev.ua, co.uk).
+                if (isPublicSuffix(idnDomain)) {
+                    logger.warn("Refusing to block a public suffix: {} (from {})", idnDomain, rawDomain);
                     continue;
                 }
 
@@ -190,6 +210,37 @@ public class DomainValidatorUtil {
         }
 
         return validDomains;
+    }
+
+    /**
+     * Чи є ім'я публічним суфіксом (зоною, під якою реєструють домени) —
+     * наприклад {@code com.ua}, {@code kiev.ua}, {@code co.uk}, {@code com}.
+     *
+     * @param domain доменне ім'я
+     * @return true, якщо це публічний суфікс
+     */
+    private static boolean isPublicSuffix(String domain) {
+        try {
+            return InternetDomainName.from(domain).isPublicSuffix();
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Чи є ім'я реєстрованим доменом під публічним суфіксом — тобто чи має
+     * воно власну «приватну» частину ({@code shop.com.ua} має, {@code com.ua}
+     * не має).
+     *
+     * @param domain доменне ім'я
+     * @return true, якщо під публічним суфіксом є хоча б один власний лейбл
+     */
+    private static boolean isUnderPublicSuffix(String domain) {
+        try {
+            return InternetDomainName.from(domain).isUnderPublicSuffix();
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     private static String extractTld(String domain) {

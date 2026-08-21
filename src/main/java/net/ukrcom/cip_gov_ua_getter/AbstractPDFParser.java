@@ -25,11 +25,10 @@ import java.net.URISyntaxException;
 import java.net.URLConnection;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
-import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.security.cert.X509Certificate;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -41,6 +40,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
@@ -48,6 +48,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Set;
@@ -109,40 +110,57 @@ public abstract class AbstractPDFParser {
      */
     private static final int PARSE_PERMITS = 12;
 
+    /**
+     * Хости, для яких дозволено обхід перевірки TLS-сертифіката.
+     * <p>
+     * Обхід потрібен лише через некоректний ланцюжок сертифікатів на
+     * {@code webportal.nrada.gov.ua}. Застосовувати його до будь-якого
+     * хоста небезпечно: активний MITM міг би навмисно зірвати рукостискання,
+     * дочекатися повторної спроби вже без перевірки й підсунути власний
+     * перелік доменів — а він потрапляє прямо в DNS-блокування провайдера.
+     */
+    private static final String DEFAULT_SSL_BYPASS_HOSTS = "webportal.nrada.gov.ua";
+
     protected final Properties properties;
     protected final Path manualDir;
     protected final boolean debug;
+    private final Set<String> sslBypassHosts;
     protected String sourceDomain;
     protected String[] serviceSubdomains;
 
     public AbstractPDFParser(Properties properties, boolean debug) {
         this.properties = properties;
         this.debug = debug;
-        String manualDirStr = properties.getProperty("AggressorServices_prescript_to", "./PRESCRIPT").trim();
-        this.manualDir = Paths.get(manualDirStr).normalize();
-        try {
-            Files.createDirectories(this.manualDir);
-            logger.debug("Ensured directory exists: {}", this.manualDir);
-        } catch (IOException e) {
-            logger.error("Failed to create directory {}: {}", this.manualDir, e.getMessage(), e);
-            throw new RuntimeException("Cannot create directory: " + this.manualDir, e);
-        }
-        String subdomains = properties.getProperty("SERVICE_SUBDOMAINS",
-                "www,ftp,mail,api,blog,shop,login,admin,web,secure,m,mobile,app,dev,test,m");
-        this.serviceSubdomains = Arrays.stream(subdomains.split(","))
+        this.manualDir = ConfigUtil.ensureDirectory(
+                properties.getProperty("AggressorServices_prescript_to", "./PRESCRIPT"));
+        this.serviceSubdomains = ConfigUtil.serviceSubdomains(properties);
+        this.sslBypassHosts = Arrays.stream(
+                properties.getProperty("ssl_bypass_hosts", DEFAULT_SSL_BYPASS_HOSTS).split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
-                .filter(s -> {
-                    boolean valid = s.matches("[a-zA-Z0-9-]+");
-                    if (!valid && debug) {
-                        logger.debug("Invalid subdomain skipped: {}", s);
-                    }
-                    return valid;
-                })
-                .toArray(String[]::new);
-        if (serviceSubdomains.length == 0) {
-            logger.warn("No valid service subdomains defined in SERVICE_SUBDOMAINS");
+                .map(s -> s.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * Чи дозволено вимикати перевірку сертифіката для цього URL.
+     *
+     * @param url адреса, на якій стався {@link SSLException}
+     * @return true, якщо хост є в {@code ssl_bypass_hosts}
+     */
+    protected boolean isSslBypassAllowed(String url) {
+        String host;
+        try {
+            host = new URI(url).getHost();
+        } catch (URISyntaxException e) {
+            return false;
         }
+        if (host != null && sslBypassHosts.contains(host.toLowerCase(Locale.ROOT))) {
+            return true;
+        }
+        logger.error("SSL verification failed for host {} which is not listed in ssl_bypass_hosts "
+                + "— refusing to disable certificate checks", host);
+        return false;
     }
 
     abstract public Set<BlockedDomain> parse();
@@ -227,15 +245,22 @@ public abstract class AbstractPDFParser {
         }
 
         Files.createDirectories(destPath.getParent());
-        Path tempPath = destPath.resolveSibling(destPath.getFileName() + ".tmp");
+        Path tempPath = AtomicFiles.tempFor(destPath);
         try {
             try {
                 downloadViaConnection(pdfUrl, tempPath, null);
             } catch (SSLException e) {
+                if (!isSslBypassAllowed(pdfUrl)) {
+                    throw e;
+                }
                 logger.warn("SSL verification failed for {}, retrying with per-connection SSL bypass: {}", pdfUrl, e.getMessage());
                 Files.deleteIfExists(tempPath);
                 downloadViaConnection(pdfUrl, tempPath, createTrustAllSslSocketFactory());
             }
+            // Сервер міг віддати HTML-сторінку помилки з кодом 200 або тіло
+            // невідстеженого редиректу. Без цієї перевірки таке сміття осідає
+            // в кеші під іменем .pdf і мовчки «парситься» щоразу.
+            requirePdfSignature(tempPath, pdfUrl);
         } catch (IOException e) {
             Files.deleteIfExists(tempPath);
             if (cacheExists) {
@@ -245,12 +270,31 @@ public abstract class AbstractPDFParser {
             }
             throw e;
         }
-        try {
-            Files.move(tempPath, destPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(tempPath, destPath, StandardCopyOption.REPLACE_EXISTING);
-        }
+        AtomicFiles.moveIntoPlace(tempPath, destPath);
         logger.info("Downloaded fresh PDF: {}", destPath);
+    }
+
+    /**
+     * Переконується, що завантажений файл справді PDF.
+     * <p>
+     * Сигнатура {@code %PDF-} за специфікацією стоїть на початку, але деякі
+     * генератори лишають перед нею кілька байтів сміття, тож шукаємо її в
+     * межах першого кілобайта — так само поблажливо, як робить PDFBox.
+     *
+     * @param path завантажений файл
+     * @param sourceUrl адреса, з якої його взято (для повідомлення)
+     * @throws IOException якщо сигнатури немає
+     */
+    private void requirePdfSignature(Path path, String sourceUrl) throws IOException {
+        byte[] head;
+        try (InputStream in = Files.newInputStream(path)) {
+            head = in.readNBytes(1024);
+        }
+        String asText = new String(head, StandardCharsets.ISO_8859_1);
+        if (!asText.contains("%PDF-")) {
+            throw new IOException("Downloaded file from " + sourceUrl
+                    + " is not a PDF (no %PDF- signature in first " + head.length + " bytes)");
+        }
     }
 
     private void downloadViaConnection(String pdfUrl, Path destPath, SSLSocketFactory sslSocketFactory) throws IOException {
@@ -356,11 +400,16 @@ public abstract class AbstractPDFParser {
 
                 Matcher domainMatcher = DOMAIN_PATTERN.matcher(cleanedText);
 
+                // Один штамп часу на весь документ: раніше LocalDateTime.now()
+                // викликався на кожен збіг, і той самий домен, згаданий у PDF
+                // кілька разів, давав кілька записів у TreeSet (компаратор
+                // враховує дату) — 944 об'єкти замість 907 імен.
+                LocalDateTime extractedAt = LocalDateTime.now();
                 while (domainMatcher.find()) {
                     String match = domainMatcher.group();
                     DomainValidatorUtil.validateDomain(
                             match, serviceSubdomains, sourceDomain, DOMAIN_VALIDATOR, IP_VALIDATOR, SPOOF_CHECKER, logger,
-                            true, LocalDateTime.now(), domains);
+                            true, extractedAt, domains);
 
                 }
             }
