@@ -122,6 +122,26 @@ public class BlockedObjects {
     }
 
     /**
+     * Повертає всі відомі доменні імена — і ті, що підлягають блокуванню, і
+     * ті, що були розблоковані.
+     * <p>
+     * Потрібно дорадчому переліку кандидатів
+     * ({@link AbstractPDFParser#storePossiblyMissedDomains}): пропонувати до
+     * ручної перевірки має сенс лише те, чого ми ще не знаємо. Розблоковані
+     * домени теж входять — рішення щодо них уже прийняте, і повертати їх у
+     * вигляді «а може, ви це пропустили?» не варто.
+     *
+     * @return імена всіх доменів, що фігурують у переліку
+     */
+    public TreeSet<String> getKnownDomainNames() {
+        TreeSet<String> names = new TreeSet<>();
+        for (BlockedDomain bd : this.blockedDomains) {
+            names.add(bd.getDomainName());
+        }
+        return names;
+    }
+
+    /**
      * Зберігає перелік доменів у вихідний файл, указаний у blocked_result.
      * Включає лише домени зі статусом isBlocked = true.
      *

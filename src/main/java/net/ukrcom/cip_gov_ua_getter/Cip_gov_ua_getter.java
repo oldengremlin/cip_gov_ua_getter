@@ -103,6 +103,13 @@ public class Cip_gov_ua_getter {
             bo.storeState();
             logger.info("Successfully stored blocked domains state");
 
+            // Дорадчий перелік — лише тепер, коли відомі домени зібрані з
+            // усіх джерел. Раніше кандидат порівнювався тільки з результатом
+            // свого ж документа, тож давно заблоковане ім'я з іншого джерела
+            // (текстового розпорядження, вхідного файлу blocked) щоразу
+            // виглядало як нова знахідка.
+            AbstractPDFParser.storePossiblyMissedDomains(bo.getKnownDomainNames());
+
         } catch (IOException e) {
             logger.error("Failed to process articles: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to process articles", e);
