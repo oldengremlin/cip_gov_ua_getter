@@ -39,9 +39,11 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -531,6 +533,7 @@ public abstract class AbstractPDFParser {
 
         candidates.removeAll(knownDomains);
         candidates.removeAll(readDomainListFile(POSSIBLY_MISSED_IGNORE_FILE));
+        dropTruncatedForms(candidates, knownDomains);
 
         Path target = Paths.get(POSSIBLY_MISSED_FILE);
         try {
@@ -547,6 +550,69 @@ public abstract class AbstractPDFParser {
         } catch (IOException e) {
             logger.warn("Failed to write {}: {}", POSSIBLY_MISSED_FILE, e.getMessage());
         }
+    }
+
+    /**
+     * Прибирає з переліку кандидатів ті, що є обрізаним початком уже
+     * відомого домену.
+     * <p>
+     * Дорадчий прохід склеює рядки пробілом, і коли PDF-редактор переніс
+     * рядок посеред імені, лишається початок, який випадково валідний сам по
+     * собі: {@code kinozapasho20.kinoza.top} → {@code …kinoza.to} (Тонга),
+     * {@code wwwlordfilm52.kinozi.link} → {@code …kinozi.li} (Ліхтенштейн).
+     * Ознака надійна: серед відомих доменів є довший, для якого кандидат —
+     * початок, причому обрив припадає <b>всередину</b> лейбла. Якщо ж одразу
+     * за кандидатом стоїть крапка, це не обрив, а звичайна ієрархія
+     * ({@code ivi.ru} для {@code ivi.ru.example}) — такий кандидат лишаємо.
+     * <p>
+     * Теоретично можливий хибний відсів: {@code example.co} — самостійний
+     * домен, який виглядає як обрізаний {@code example.com}. Ціна помилки
+     * тут низька: у гіршому разі людині не запропонують подивитися на ім'я,
+     * тоді як у блокування воно однаково не потрапляє. Тому кожен відсів
+     * пишеться в лог — видно, що саме прибрано і через який відомий домен.
+     *
+     * @param candidates перелік кандидатів; змінюється на місці
+     * @param knownDomains усі відомі домени
+     */
+    private static void dropTruncatedForms(Set<String> candidates, Set<String> knownDomains) {
+        if (candidates.isEmpty()) {
+            return;
+        }
+        // TreeSet дає tailSet: імена, що починаються з кандидата, лежать
+        // одразу за ним, тож перебирати всі відомі домени не доводиться.
+        NavigableSet<String> sorted = knownDomains instanceof NavigableSet
+                ? (NavigableSet<String>) knownDomains
+                : new TreeSet<>(knownDomains);
+
+        Iterator<String> it = candidates.iterator();
+        while (it.hasNext()) {
+            String candidate = it.next();
+            String longer = truncatedFormOf(candidate, sorted);
+            if (longer != null) {
+                it.remove();
+                logger.info("Skipping possibly missed domain {}: looks like a truncated form of "
+                        + "already known {}", candidate, longer);
+            }
+        }
+    }
+
+    /**
+     * Шукає відомий домен, обрізаним початком якого є кандидат.
+     *
+     * @param candidate кандидат із дорадчого проходу
+     * @param known відомі домени в лексикографічному порядку
+     * @return знайдений довший домен або {@code null}
+     */
+    private static String truncatedFormOf(String candidate, NavigableSet<String> known) {
+        for (String longer : known.tailSet(candidate, false)) {
+            if (!longer.startsWith(candidate)) {
+                break;
+            }
+            if (longer.charAt(candidate.length()) != '.') {
+                return longer;
+            }
+        }
+        return null;
     }
 
     /**
