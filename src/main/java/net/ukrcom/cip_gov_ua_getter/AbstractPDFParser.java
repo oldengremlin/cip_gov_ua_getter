@@ -121,6 +121,40 @@ public abstract class AbstractPDFParser {
      */
     private static final String DEFAULT_SSL_BYPASS_HOSTS = "webportal.nrada.gov.ua";
 
+    /**
+     * Файл, куди пишуться домени, знайдені лише в дорадчому проході, але
+     * відсутні в основному результаті — кандидати на ручну перевірку.
+     * <p>
+     * Ніколи не потрапляють у {@code blocked.result.txt} автоматично.
+     * {@code prepareDocument} свідомо прибирає перенос рядка повністю (а не
+     * замінює на пробіл): заміна ламає легітимні домени, перенесені
+     * PDF-редактором посеред лейбла (перевірено на реальному документі —
+     * {@code https://hdplayer.kinogo-\nnew.com} розпадається на сміття й
+     * вигаданий, який не існує в джерелі домен {@code new.com}, що пройшов
+     * би валідацію). Але та сама заміна на пробіл інколи відновлює домени,
+     * зжовані сусіднім текстом (номером рядка таблиці, слаг-фрагментом URL
+     * рішення) — тому обидві стратегії об'єднання тексту пробуються тут
+     * додатково, а різниця з основним результатом лише пропонується
+     * людині, не додається автоматично. Див. принцип у CLAUDE.md.
+     */
+    private static final String POSSIBLY_MISSED_FILE = "possible_missed_domains.txt";
+
+    /**
+     * Файл, яким користувач вручну заглушує конкретні пропозиції з
+     * {@value #POSSIBLY_MISSED_FILE} — по одному домену на рядок, {@code #}
+     * — коментар. Домен звідси більше ніколи не потрапить у пропозиції,
+     * навіть якщо дорадчий прохід знову його "знайде".
+     */
+    private static final String POSSIBLY_MISSED_IGNORE_FILE = "possible_missed_domains.ignore";
+
+    /**
+     * Захищає одночасні читання-зміну-запис {@value #POSSIBLY_MISSED_FILE}:
+     * кілька PDF розбираються паралельно на віртуальних потоках
+     * ({@link #downloadAndExtractAll}), тож без синхронізації два потоки
+     * могли б перезаписати результати одне одного.
+     */
+    private static final Object POSSIBLY_MISSED_LOCK = new Object();
+
     protected final Properties properties;
     protected final Path manualDir;
     protected final boolean debug;
@@ -412,12 +446,112 @@ public abstract class AbstractPDFParser {
                             true, extractedAt, domains);
 
                 }
+
+                reportPossiblyMissedDomains(filePath, text, domains);
             }
         } catch (IOException e) {
             logger.error("Error processing PDF file {}: {}", filePath, e.getMessage(), e);
         }
 
         return domains;
+    }
+
+    /**
+     * Дорадчий прохід: тим самим сирим текстом документа, але з іншою
+     * стратегією об'єднання рядків ({@code \n} → пробіл замість видалення),
+     * шукає домени, яких немає в основному (авторитетному) результаті —
+     * кандидати на ручну перевірку. Ніколи нічого не додає в
+     * {@code authoritative} й не впливає на {@code blocked.result.txt}; лише
+     * дописує різницю у {@value #POSSIBLY_MISSED_FILE}. Див. Javadoc цього
+     * поля та принцип «один авторитетний + один дорадчий» у CLAUDE.md.
+     *
+     * @param filePath шлях до PDF (лише для повідомлення в лог)
+     * @param rawText сирий текст, здобутий PDFBox до {@link #prepareDocument}
+     * @param authoritative результат основного проходу для цього файлу
+     */
+    private void reportPossiblyMissedDomains(String filePath, String rawText, Set<BlockedDomain> authoritative) {
+        Set<String> diagnosticNames = extractDiagnosticNames(rawText);
+        if (diagnosticNames.isEmpty()) {
+            return;
+        }
+
+        Set<String> authoritativeNames = authoritative.stream()
+                .map(BlockedDomain::getDomainName)
+                .collect(Collectors.toCollection(TreeSet::new));
+        diagnosticNames.removeAll(authoritativeNames);
+        if (diagnosticNames.isEmpty()) {
+            return;
+        }
+
+        synchronized (POSSIBLY_MISSED_LOCK) {
+            Set<String> ignored = readDomainListFile(POSSIBLY_MISSED_IGNORE_FILE);
+            diagnosticNames.removeAll(ignored);
+            if (diagnosticNames.isEmpty()) {
+                return;
+            }
+
+            Set<String> merged = readDomainListFile(POSSIBLY_MISSED_FILE);
+            boolean grew = merged.addAll(diagnosticNames);
+            if (!grew) {
+                return;
+            }
+
+            try {
+                String content = String.join("\n", merged) + "\n";
+                AtomicFiles.write(Paths.get(POSSIBLY_MISSED_FILE), content.getBytes(StandardCharsets.UTF_8));
+                logger.info("Possibly missed domains from {}: {} new candidate(s) added to {}",
+                        filePath, diagnosticNames.size(), POSSIBLY_MISSED_FILE);
+            } catch (IOException e) {
+                logger.warn("Failed to write {}: {}", POSSIBLY_MISSED_FILE, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Дорадчий (не авторитетний) розбір тексту: об'єднує рядки пробілом
+     * замість видалення переносу, на відміну від {@link #prepareDocument}.
+     * Проганяє кожен збіг через {@link DomainValidatorUtil#validateDomain} у
+     * тихому режимі ({@code quiet=true}), щоб не подвоювати обсяг
+     * INFO/WARN-логів авторитетного проходу тим самим текстом.
+     *
+     * @param rawText сирий текст документа
+     * @return усі валідні домени, знайдені цим проходом
+     */
+    private Set<String> extractDiagnosticNames(String rawText) {
+        Set<String> names = new TreeSet<>();
+        String spaceJoined = rawText.replace("\n", " ");
+        Matcher domainMatcher = DOMAIN_PATTERN.matcher(spaceJoined);
+        while (domainMatcher.find()) {
+            names.addAll(DomainValidatorUtil.validateDomain(
+                    domainMatcher.group(), serviceSubdomains, sourceDomain, DOMAIN_VALIDATOR, IP_VALIDATOR,
+                    SPOOF_CHECKER, logger, false, null, null, true));
+        }
+        return names;
+    }
+
+    /**
+     * Читає список доменів, по одному на рядок; {@code #} на початку рядка —
+     * коментар, порожні рядки ігноруються. Відсутній файл — не помилка, а
+     * порожній перелік (його ще ніхто не створив).
+     *
+     * @param path шлях до файлу
+     * @return прочитані домени в нижньому регістрі
+     */
+    private Set<String> readDomainListFile(String path) {
+        Path p = Paths.get(path);
+        if (!Files.exists(p)) {
+            return new TreeSet<>();
+        }
+        try {
+            return Files.readAllLines(p, StandardCharsets.UTF_8).stream()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                    .map(line -> line.toLowerCase(Locale.ROOT))
+                    .collect(Collectors.toCollection(TreeSet::new));
+        } catch (IOException e) {
+            logger.warn("Failed to read {}: {}", path, e.getMessage());
+            return new TreeSet<>();
+        }
     }
 
 }
