@@ -300,7 +300,7 @@ public class DomainValidatorUtil {
      * @param logger логер для пояснення, чому префікс лишено
      * @return ім'я без службового префікса або незмінене
      */
-    private static String stripServiceSubdomain(String domain, String[] serviceSubdomains, Logger logger) {
+    public static String stripServiceSubdomain(String domain, String[] serviceSubdomains, Logger logger) {
         for (String service : serviceSubdomains) {
             if (domain.startsWith(service + ".")) {
                 String remainder = domain.substring(service.length() + 1);
@@ -322,7 +322,7 @@ public class DomainValidatorUtil {
      * @param domain доменне ім'я
      * @return true, якщо це публічний суфікс
      */
-    private static boolean isPublicSuffix(String domain) {
+    public static boolean isPublicSuffix(String domain) {
         try {
             return InternetDomainName.from(domain).isPublicSuffix();
         } catch (IllegalArgumentException e) {
