@@ -75,10 +75,41 @@ public class DomainValidatorUtil {
      */
     private static final Pattern GLUED_SCHEME_SUFFIX = Pattern.compile("(?i)(https|http|ftp|htpps)$");
 
+    /**
+     * Ознака номера рядка таблиці, зжованого в середину домену. У «Переліках»
+     * НЦУ/НКЕК кожен сервіс — рядок таблиці з номером ({@code 13.}), і коли
+     * останній URL одного рядка після видалення переносів злипається з
+     * номером наступного ({@code kinogo.ga} + {@code 13.} + {@code Kinokrad}
+     * → {@code kinogo.ga13.kinokrad}), жадібна група TLD захоплює й номер, і
+     * початок наступної назви. Довжину пробігу цифр навмисно не обмежуємо
+     * ({@code \d+}, а не {@code \d{1,3}}): перелік теоретично може вирости
+     * за 999 позицій, а обмеження просто мовчки перестало б спрацьовувати
+     * без жодного попередження — тоді як зайвий ризик тут відсутній,
+     * оскільки кандидат однаково проходить повну повторну валідацію.
+     */
+    private static final Pattern EMBEDDED_ROW_NUMBER = Pattern.compile("\\d+\\.");
+
     public static Set<String> validateDomain(String rawDomain, String[] serviceSubdomains, String sourceDomain,
             DomainValidator domainValidator, InetAddressValidator ipValidator,
             SpoofChecker spoofChecker, Logger logger, boolean includeBlockedDomain,
             LocalDateTime dateTime, Set<BlockedDomain> blockedDomains) {
+        return validateDomain(rawDomain, serviceSubdomains, sourceDomain, domainValidator, ipValidator,
+                spoofChecker, logger, includeBlockedDomain, dateTime, blockedDomains, false);
+    }
+
+    /**
+     * @param quiet якщо {@code true} — усі повідомлення, що звичайно йдуть на
+     * рівень {@code INFO}/{@code WARN}, пишуться на {@code DEBUG}. Потрібно
+     * дорадчому проходу ({@code AbstractPDFParser.extractDiagnosticNames}):
+     * він проганяє через цей самий метод увесь текст документа вдруге, з
+     * іншою стратегією об'єднання рядків, і без цього прапорця подвоював би
+     * обсяг INFO/WARN-логів на кожен запуск, не додаючи користі — бо
+     * авторитетний прохід уже залогував ті самі домени.
+     */
+    public static Set<String> validateDomain(String rawDomain, String[] serviceSubdomains, String sourceDomain,
+            DomainValidator domainValidator, InetAddressValidator ipValidator,
+            SpoofChecker spoofChecker, Logger logger, boolean includeBlockedDomain,
+            LocalDateTime dateTime, Set<BlockedDomain> blockedDomains, boolean quiet) {
         Set<String> validDomains = new HashSet<>();
 
         try {
@@ -100,7 +131,7 @@ public class DomainValidatorUtil {
 
                 // Перевірка на порожній домен або надмірну довжину
                 if (domain.isBlank() || domain.length() > 255) {
-                    logger.warn("Skipping domain due to invalid length: {}", domain);
+                    logWarn(logger, quiet, "Skipping domain due to invalid length: {}", domain);
                     continue;
                 }
 
@@ -140,21 +171,21 @@ public class DomainValidatorUtil {
 
                 // Пропускаємо sourceDomain, якщо він є
                 if (sourceDomain != null && domain.equals(sourceDomain)) {
-                    logger.warn("Skipping source domain: {}", domain);
+                    logWarn(logger, quiet, "Skipping source domain: {}", domain);
                     continue;
                 }
 
                 // Конвертуємо в Punycode
                 String idnDomain = IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED);
                 if (idnDomain.length() > 255) {
-                    logger.warn("Skipping domain after IDN conversion due to length: {}", idnDomain);
+                    logWarn(logger, quiet, "Skipping domain after IDN conversion due to length: {}", idnDomain);
                     continue;
                 }
 
                 // Останній запобіжник: публічний суфікс не може бути ціллю
                 // блокування — це не сайт, а ціла зона (com.ua, kiev.ua, co.uk).
                 if (isPublicSuffix(idnDomain)) {
-                    logger.warn("Refusing to block a public suffix: {} (from {})", idnDomain, rawDomain);
+                    logWarn(logger, quiet, "Refusing to block a public suffix: {} (from {})", idnDomain, rawDomain);
                     continue;
                 }
 
@@ -162,39 +193,46 @@ public class DomainValidatorUtil {
                 if (domainValidator.isValid(idnDomain)) {
                     String tld = extractTld(idnDomain);
                     if (tld == null) {
-                        logger.warn("Invalid TLD (null) for domain: {}", idnDomain);
+                        logWarn(logger, quiet, "Invalid TLD (null) for domain: {}", idnDomain);
                         continue;
                     }
                     // Перевіряємо TLD через кеш
                     Boolean isValidTld = TLD_CACHE.computeIfAbsent(tld, k -> domainValidator.isValidTld(k));
                     if (!isValidTld) {
-                        logger.warn("Invalid TLD '{}' for domain: {}", tld, idnDomain);
+                        logWarn(logger, quiet, "Invalid TLD '{}' for domain: {}", tld, idnDomain);
                         continue;
                     }
                     validDomains.add(idnDomain);
                     if (includeBlockedDomain) {
                         blockedDomains.add(new BlockedDomain(idnDomain, true, dateTime));
                     }
-                    logger.info("Valid IDN domain: {}", idnDomain);
+                    logInfo(logger, quiet, "Valid IDN domain: {}", idnDomain);
                 } else if (ipValidator.isValid(domain)) {
-                    logger.warn("Skipping IP address: {}", domain);
+                    logWarn(logger, quiet, "Skipping IP address: {}", domain);
                     continue;
                 } else {
-                    // Евристичний фолбек — лише після невдачі звичайної
-                    // валідації, тож справді биті фрагменти без схеми в
-                    // хвості (77.muvee) сюди не потрапляють і лишаються
-                    // Invalid, як і мають.
+                    // Евристичні фолбеки — лише після невдачі звичайної
+                    // валідації, тож справді биті фрагменти без приліпленого
+                    // хвоста (77.muvee) сюди не потрапляють і лишаються
+                    // Invalid, як і мають. Обидва пишуть однаковий за формою
+                    // лог ("heuristically recovered from"), щоб один grep
+                    // ловив усі евристичні відновлення разом.
                     String healedIdn = healGluedSchemeSuffix(domain, domainValidator);
+                    String healedFrom = "the next URL's scheme, with no separator";
+                    if (healedIdn == null) {
+                        healedIdn = healEmbeddedRowNumber(domain, domainValidator);
+                        healedFrom = "the next table row's number, with no separator";
+                    }
                     if (healedIdn != null) {
                         validDomains.add(healedIdn);
                         if (includeBlockedDomain) {
                             blockedDomains.add(new BlockedDomain(healedIdn, true, dateTime));
                         }
-                        logger.info("Valid IDN domain: {} (heuristically recovered from '{}' — "
-                                + "PDF text likely glued to the next URL without a separator)",
-                                healedIdn, domain);
+                        logInfo(logger, quiet, "Valid IDN domain: {} (heuristically recovered from '{}' — "
+                                + "PDF text likely glued to {})",
+                                healedIdn, domain, healedFrom);
                     } else {
-                        logger.warn("Invalid IDN domain: {}", domain);
+                        logWarn(logger, quiet, "Invalid IDN domain: {}", domain);
                     }
                 }
 
@@ -204,24 +242,24 @@ public class DomainValidatorUtil {
                     String latinized = SKELETON_CACHE.computeIfAbsent(domain, spoofChecker::getSkeleton);
                     String latinizedIdn = IDN.toASCII(latinized, IDN.ALLOW_UNASSIGNED).toLowerCase();
                     if (latinizedIdn.length() > 255) {
-                        logger.warn("Skipping latinized domain due to length: {}", latinizedIdn);
+                        logWarn(logger, quiet, "Skipping latinized domain due to length: {}", latinizedIdn);
                     } else if (domainValidator.isValid(latinizedIdn) && !latinizedIdn.equals(idnDomain)) {
                         String latinizedTld = extractTld(latinizedIdn);
                         if (latinizedTld == null) {
-                            logger.warn("Invalid TLD (null) for latinized domain: {}", latinizedIdn);
+                            logWarn(logger, quiet, "Invalid TLD (null) for latinized domain: {}", latinizedIdn);
                             continue;
                         }
                         // Перевіряємо TLD через кеш для латинізованого домену
                         Boolean isValidLatinizedTld = TLD_CACHE.computeIfAbsent(latinizedTld, k -> domainValidator.isValidTld(k));
                         if (!isValidLatinizedTld) {
-                            logger.warn("Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
+                            logWarn(logger, quiet, "Invalid TLD '{}' for latinized domain: {}", latinizedTld, latinizedIdn);
                             continue;
                         }
                         validDomains.add(latinizedIdn);
                         if (includeBlockedDomain) {
                             blockedDomains.add(new BlockedDomain(latinizedIdn, true, dateTime));
                         }
-                        logger.info("Valid latinized domain: {} (from {} ⮕ {})", latinizedIdn, domain, latinized);
+                        logInfo(logger, quiet, "Valid latinized domain: {} (from {} ⮕ {})", latinizedIdn, domain, latinized);
                     } else {
                         logger.debug("Latinized domain invalid or identical: {} (from {} ⮕ {})", latinized, domain, latinized);
                     }
@@ -229,14 +267,30 @@ public class DomainValidatorUtil {
             }
 
             if (!found) {
-                logger.warn("No valid domain found in: {}", rawDomain);
+                logWarn(logger, quiet, "No valid domain found in: {}", rawDomain);
             }
 
         } catch (Exception e) {
-            logger.warn("Error processing domain {}: {}", rawDomain, e.getMessage());
+            logWarn(logger, quiet, "Error processing domain {}: {}", rawDomain, e.getMessage());
         }
 
         return validDomains;
+    }
+
+    private static void logInfo(Logger logger, boolean quiet, String format, Object... args) {
+        if (quiet) {
+            logger.debug(format, args);
+        } else {
+            logger.info(format, args);
+        }
+    }
+
+    private static void logWarn(Logger logger, boolean quiet, String format, Object... args) {
+        if (quiet) {
+            logger.debug(format, args);
+        } else {
+            logger.warn(format, args);
+        }
     }
 
     /**
@@ -297,17 +351,68 @@ public class DomainValidatorUtil {
         if (stripped.isEmpty() || !Character.isLetterOrDigit(stripped.charAt(stripped.length() - 1))) {
             return null;
         }
+        return asValidIdnOrNull(stripped, domainValidator);
+    }
+
+    /**
+     * Пробує «вилікувати» домен, зжований номером наступного рядка таблиці
+     * ({@code kinogo.ga13.kinokrad} → {@code kinogo.ga}, бо {@code 13.} —
+     * номер сусіднього рядка, а {@code Kinokrad} — початок його назви).
+     * <p>
+     * На відміну від {@link #healGluedSchemeSuffix}, тут кандидатів на
+     * розрізання може бути декілька: справжні домени часто мають лейбли, що
+     * закінчуються на цифру перед крапкою ({@code v4.tartugi.uno}), і перший
+     * зліва пробіг цифр — не обов'язково той, що вказує на межу склеювання.
+     * Тому перебираємо всі позиції зліва направо й лишаємо
+     * <b>найдовший</b> префікс, що незалежно пройде повну валідацію: це і
+     * найбезпечніший вибір (менше шансів випадково зупинитися на короткому
+     * збігу), і найповніше відновлення.
+     *
+     * @param domain домен, що не пройшов звичайну валідацію
+     * @param domainValidator валідатор доменів
+     * @return вилікуваний Punycode-домен або {@code null}
+     */
+    private static String healEmbeddedRowNumber(String domain, DomainValidator domainValidator) {
+        Matcher m = EMBEDDED_ROW_NUMBER.matcher(domain);
+        String best = null;
+        while (m.find()) {
+            if (m.start() == 0) {
+                // Номер стоїть на самому початку (77.muvee) — префікса
+                // немає, це не склеювання, а чистий шум номера рядка.
+                continue;
+            }
+            String candidate = asValidIdnOrNull(domain.substring(0, m.start()), domainValidator);
+            if (candidate != null) {
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Спільна перевірка кандидата для обох евристичних фолбеків вище:
+     * IDN-конверсія, публічний суфікс, валідність, TLD. Виокремлено, щоб не
+     * дублювати ту саму послідовність перевірок двічі.
+     *
+     * @param candidate рядок-кандидат без протоколу й хвостового сміття
+     * @param domainValidator валідатор доменів
+     * @return Punycode-домен, якщо кандидат валідний; інакше {@code null}
+     */
+    private static String asValidIdnOrNull(String candidate, DomainValidator domainValidator) {
+        if (candidate.isEmpty()) {
+            return null;
+        }
         try {
-            String strippedIdn = IDN.toASCII(stripped, IDN.ALLOW_UNASSIGNED);
-            if (strippedIdn.length() > 255 || isPublicSuffix(strippedIdn) || !domainValidator.isValid(strippedIdn)) {
+            String idn = IDN.toASCII(candidate, IDN.ALLOW_UNASSIGNED);
+            if (idn.length() > 255 || isPublicSuffix(idn) || !domainValidator.isValid(idn)) {
                 return null;
             }
-            String tld = extractTld(strippedIdn);
+            String tld = extractTld(idn);
             if (tld == null) {
                 return null;
             }
             Boolean isValidTld = TLD_CACHE.computeIfAbsent(tld, k -> domainValidator.isValidTld(k));
-            return Boolean.TRUE.equals(isValidTld) ? strippedIdn : null;
+            return Boolean.TRUE.equals(isValidTld) ? idn : null;
         } catch (IllegalArgumentException e) {
             return null;
         }

@@ -34,3 +34,6 @@ blocked.*
 *~
 /target/
 dependency-reduced-pom.xml
+
+# Дорадчий список кандидатів і файл заглушення — локальні для кожного запуску
+possible_missed_domains.ignore
