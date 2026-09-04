@@ -39,9 +39,11 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -148,12 +150,35 @@ public abstract class AbstractPDFParser {
     private static final String POSSIBLY_MISSED_IGNORE_FILE = "possible_missed_domains.ignore";
 
     /**
-     * Захищає одночасні читання-зміну-запис {@value #POSSIBLY_MISSED_FILE}:
-     * кілька PDF розбираються паралельно на віртуальних потоках
-     * ({@link #downloadAndExtractAll}), тож без синхронізації два потоки
-     * могли б перезаписати результати одне одного.
+     * Захищає накопичення й запис кандидатів: кілька PDF розбираються
+     * паралельно на віртуальних потоках ({@link #downloadAndExtractAll}), тож
+     * без синхронізації два потоки могли б перезаписати результати одне
+     * одного.
      */
     private static final Object POSSIBLY_MISSED_LOCK = new Object();
+
+    /**
+     * Кандидати, зібрані дорадчим проходом за весь запуск, — з усіх PDF
+     * разом.
+     * <p>
+     * Стан навмисно спільний для всіх парсерів і живе до кінця запуску:
+     * відсіяти вже відоме можна лише тоді, коли відпрацювали <b>всі</b>
+     * джерела. Порівнювати кандидата з результатом того самого документа
+     * недостатньо — домен на кшталт {@code ivi.ru} може бути давно
+     * заблокований за текстовим розпорядженням або взятий із вхідного файлу
+     * {@code blocked}, і тоді пропонувати його вдруге немає сенсу. Тому
+     * запис у файл робить {@link #storePossiblyMissedDomains}, який
+     * викликається один раз наприкінці {@code Cip_gov_ua_getter.main()}.
+     */
+    private static final Set<String> POSSIBLY_MISSED = new TreeSet<>();
+
+    /**
+     * Скільки документів дорадчий прохід устиг розібрати за цей запуск.
+     * Потрібно, щоб не стерти наявні пропозиції, якщо жодне PDF-джерело не
+     * відпрацювало (мережа, недоступний сервер): порожній результат тоді
+     * означає не «пропозицій більше немає», а «нема чого сказати».
+     */
+    private static int possiblyMissedDocuments = 0;
 
     protected final Properties properties;
     protected final Path manualDir;
@@ -447,7 +472,7 @@ public abstract class AbstractPDFParser {
 
                 }
 
-                reportPossiblyMissedDomains(filePath, text, domains);
+                collectPossiblyMissedDomains(text);
             }
         } catch (IOException e) {
             logger.error("Error processing PDF file {}: {}", filePath, e.getMessage(), e);
@@ -457,54 +482,137 @@ public abstract class AbstractPDFParser {
     }
 
     /**
-     * Дорадчий прохід: тим самим сирим текстом документа, але з іншою
-     * стратегією об'єднання рядків ({@code \n} → пробіл замість видалення),
-     * шукає домени, яких немає в основному (авторитетному) результаті —
-     * кандидати на ручну перевірку. Ніколи нічого не додає в
-     * {@code authoritative} й не впливає на {@code blocked.result.txt}; лише
-     * дописує різницю у {@value #POSSIBLY_MISSED_FILE}. Див. Javadoc цього
-     * поля та принцип «один авторитетний + один дорадчий» у CLAUDE.md.
+     * Дорадчий прохід: розбирає той самий сирий текст документа з іншою
+     * стратегією об'єднання рядків ({@code \n} → пробіл замість видалення) і
+     * складає знайдене в {@link #POSSIBLY_MISSED} — без жодного впливу на
+     * авторитетний результат.
+     * <p>
+     * Тут навмисно нічого не відсіюється й не пишеться на диск: що з
+     * кандидатів справді нове, стає відомо лише після того, як відпрацювали
+     * всі джерела. Відсіює й записує {@link #storePossiblyMissedDomains}.
+     * Див. принцип «один авторитетний + один дорадчий» у CLAUDE.md.
      *
-     * @param filePath шлях до PDF (лише для повідомлення в лог)
      * @param rawText сирий текст, здобутий PDFBox до {@link #prepareDocument}
-     * @param authoritative результат основного проходу для цього файлу
      */
-    private void reportPossiblyMissedDomains(String filePath, String rawText, Set<BlockedDomain> authoritative) {
+    private void collectPossiblyMissedDomains(String rawText) {
         Set<String> diagnosticNames = extractDiagnosticNames(rawText);
-        if (diagnosticNames.isEmpty()) {
-            return;
-        }
-
-        Set<String> authoritativeNames = authoritative.stream()
-                .map(BlockedDomain::getDomainName)
-                .collect(Collectors.toCollection(TreeSet::new));
-        diagnosticNames.removeAll(authoritativeNames);
-        if (diagnosticNames.isEmpty()) {
-            return;
-        }
-
         synchronized (POSSIBLY_MISSED_LOCK) {
-            Set<String> ignored = readDomainListFile(POSSIBLY_MISSED_IGNORE_FILE);
-            diagnosticNames.removeAll(ignored);
-            if (diagnosticNames.isEmpty()) {
+            POSSIBLY_MISSED.addAll(diagnosticNames);
+            possiblyMissedDocuments++;
+        }
+    }
+
+    /**
+     * Записує дорадчий перелік кандидатів у {@value #POSSIBLY_MISSED_FILE} —
+     * те, що знайшов дорадчий прохід і чого немає серед уже відомих доменів.
+     * <p>
+     * Викликається один раз наприкінці запуску, коли перелік відомих доменів
+     * повний: інакше кандидат, давно заблокований за текстовим
+     * розпорядженням чи взятий із вхідного файлу {@code blocked},
+     * пропонувався б знову й знову лише тому, що в цьому конкретному PDF
+     * його не видно.
+     * <p>
+     * Файл переписується цілком, а не доповнюється: так він завжди показує
+     * поточний стан, а пропозиція зникає сама, щойно домен потрапляє в
+     * блокування. Якщо кандидатів не лишилося — файл видаляється. Якщо ж
+     * жодного документа розібрати не вдалося, файл не чіпається взагалі:
+     * порожній результат тоді означає не «пропозицій немає», а «нема чого
+     * сказати», і стирати ним попередні пропозиції було б помилкою.
+     *
+     * @param knownDomains усі відомі домени — і заблоковані, і розблоковані
+     */
+    public static void storePossiblyMissedDomains(Set<String> knownDomains) {
+        Set<String> candidates;
+        synchronized (POSSIBLY_MISSED_LOCK) {
+            if (possiblyMissedDocuments == 0) {
+                logger.debug("No PDF documents were parsed, leaving {} untouched", POSSIBLY_MISSED_FILE);
                 return;
             }
+            candidates = new TreeSet<>(POSSIBLY_MISSED);
+        }
 
-            Set<String> merged = readDomainListFile(POSSIBLY_MISSED_FILE);
-            boolean grew = merged.addAll(diagnosticNames);
-            if (!grew) {
+        candidates.removeAll(knownDomains);
+        candidates.removeAll(readDomainListFile(POSSIBLY_MISSED_IGNORE_FILE));
+        dropTruncatedForms(candidates, knownDomains);
+
+        Path target = Paths.get(POSSIBLY_MISSED_FILE);
+        try {
+            if (candidates.isEmpty()) {
+                if (Files.deleteIfExists(target)) {
+                    logger.info("No possibly missed domains left, removed {}", POSSIBLY_MISSED_FILE);
+                }
                 return;
             }
+            String content = String.join("\n", candidates) + "\n";
+            AtomicFiles.write(target, content.getBytes(StandardCharsets.UTF_8));
+            logger.info("Wrote {} possibly missed domain(s) to {} for manual review",
+                    candidates.size(), POSSIBLY_MISSED_FILE);
+        } catch (IOException e) {
+            logger.warn("Failed to write {}: {}", POSSIBLY_MISSED_FILE, e.getMessage());
+        }
+    }
 
-            try {
-                String content = String.join("\n", merged) + "\n";
-                AtomicFiles.write(Paths.get(POSSIBLY_MISSED_FILE), content.getBytes(StandardCharsets.UTF_8));
-                logger.info("Possibly missed domains from {}: {} new candidate(s) added to {}",
-                        filePath, diagnosticNames.size(), POSSIBLY_MISSED_FILE);
-            } catch (IOException e) {
-                logger.warn("Failed to write {}: {}", POSSIBLY_MISSED_FILE, e.getMessage());
+    /**
+     * Прибирає з переліку кандидатів ті, що є обрізаним початком уже
+     * відомого домену.
+     * <p>
+     * Дорадчий прохід склеює рядки пробілом, і коли PDF-редактор переніс
+     * рядок посеред імені, лишається початок, який випадково валідний сам по
+     * собі: {@code kinozapasho20.kinoza.top} → {@code …kinoza.to} (Тонга),
+     * {@code wwwlordfilm52.kinozi.link} → {@code …kinozi.li} (Ліхтенштейн).
+     * Ознака надійна: серед відомих доменів є довший, для якого кандидат —
+     * початок, причому обрив припадає <b>всередину</b> лейбла. Якщо ж одразу
+     * за кандидатом стоїть крапка, це не обрив, а звичайна ієрархія
+     * ({@code ivi.ru} для {@code ivi.ru.example}) — такий кандидат лишаємо.
+     * <p>
+     * Теоретично можливий хибний відсів: {@code example.co} — самостійний
+     * домен, який виглядає як обрізаний {@code example.com}. Ціна помилки
+     * тут низька: у гіршому разі людині не запропонують подивитися на ім'я,
+     * тоді як у блокування воно однаково не потрапляє. Тому кожен відсів
+     * пишеться в лог — видно, що саме прибрано і через який відомий домен.
+     *
+     * @param candidates перелік кандидатів; змінюється на місці
+     * @param knownDomains усі відомі домени
+     */
+    private static void dropTruncatedForms(Set<String> candidates, Set<String> knownDomains) {
+        if (candidates.isEmpty()) {
+            return;
+        }
+        // TreeSet дає tailSet: імена, що починаються з кандидата, лежать
+        // одразу за ним, тож перебирати всі відомі домени не доводиться.
+        NavigableSet<String> sorted = knownDomains instanceof NavigableSet
+                ? (NavigableSet<String>) knownDomains
+                : new TreeSet<>(knownDomains);
+
+        Iterator<String> it = candidates.iterator();
+        while (it.hasNext()) {
+            String candidate = it.next();
+            String longer = truncatedFormOf(candidate, sorted);
+            if (longer != null) {
+                it.remove();
+                logger.info("Skipping possibly missed domain {}: looks like a truncated form of "
+                        + "already known {}", candidate, longer);
             }
         }
+    }
+
+    /**
+     * Шукає відомий домен, обрізаним початком якого є кандидат.
+     *
+     * @param candidate кандидат із дорадчого проходу
+     * @param known відомі домени в лексикографічному порядку
+     * @return знайдений довший домен або {@code null}
+     */
+    private static String truncatedFormOf(String candidate, NavigableSet<String> known) {
+        for (String longer : known.tailSet(candidate, false)) {
+            if (!longer.startsWith(candidate)) {
+                break;
+            }
+            if (longer.charAt(candidate.length()) != '.') {
+                return longer;
+            }
+        }
+        return null;
     }
 
     /**
@@ -537,7 +645,7 @@ public abstract class AbstractPDFParser {
      * @param path шлях до файлу
      * @return прочитані домени в нижньому регістрі
      */
-    private Set<String> readDomainListFile(String path) {
+    private static Set<String> readDomainListFile(String path) {
         Path p = Paths.get(path);
         if (!Files.exists(p)) {
             return new TreeSet<>();

@@ -150,24 +150,7 @@ public class DomainValidatorUtil {
                     domain = domain.substring(0, endIndex);
                 }
 
-                // Видаляємо службовий субдомен — але лише якщо після цього
-                // лишиться реєстрований домен. Інакше www.com.ua перетворився б
-                // на com.ua, а це публічний суфікс: заблокувавши його на DNS,
-                // ми поклали б усю зону. Такі імена (shop.com.ua, test.com.ua)
-                // цілком реєстровані й можуть бути законною ціллю блокування,
-                // тому лишаємо їх як є.
-                for (String service : serviceSubdomains) {
-                    if (domain.startsWith(service + ".")) {
-                        String remainder = domain.substring(service.length() + 1);
-                        if (isUnderPublicSuffix(remainder)) {
-                            domain = remainder;
-                        } else {
-                            logger.debug("Keeping {} as is: stripping '{}' would leave public suffix '{}'",
-                                    domain, service, remainder);
-                        }
-                        break;
-                    }
-                }
+                domain = stripServiceSubdomain(domain, serviceSubdomains, logger);
 
                 // Пропускаємо sourceDomain, якщо він є
                 if (sourceDomain != null && domain.equals(sourceDomain)) {
@@ -217,10 +200,10 @@ public class DomainValidatorUtil {
                     // Invalid, як і мають. Обидва пишуть однаковий за формою
                     // лог ("heuristically recovered from"), щоб один grep
                     // ловив усі евристичні відновлення разом.
-                    String healedIdn = healGluedSchemeSuffix(domain, domainValidator);
+                    String healedIdn = healGluedSchemeSuffix(domain, domainValidator, serviceSubdomains, logger);
                     String healedFrom = "the next URL's scheme, with no separator";
                     if (healedIdn == null) {
-                        healedIdn = healEmbeddedRowNumber(domain, domainValidator);
+                        healedIdn = healEmbeddedRowNumber(domain, domainValidator, serviceSubdomains, logger);
                         healedFrom = "the next table row's number, with no separator";
                     }
                     if (healedIdn != null) {
@@ -294,6 +277,45 @@ public class DomainValidatorUtil {
     }
 
     /**
+     * Прибирає службовий субдомен ({@code www}, {@code ftp}, {@code mail} та
+     * решту зі {@code SERVICE_SUBDOMAINS}) — але лише якщо після цього
+     * лишиться реєстрований домен.
+     * <p>
+     * Інакше {@code www.com.ua} перетворився б на {@code com.ua}, а це
+     * публічний суфікс: заблокувавши його на DNS, ми поклали б усю зону.
+     * Такі імена ({@code shop.com.ua}, {@code test.com.ua}) цілком
+     * реєстровані й можуть бути законною ціллю блокування, тому лишаються як
+     * є.
+     * <p>
+     * Викликається двічі: у звичайному потоці й ще раз після евристичного
+     * лікування. Другий виклик обов'язковий, бо в момент першого TLD ще
+     * зіпсований склеюванням ({@code www.ivi.ruhtpps}), перевірка на
+     * публічний суфікс не бачить реєстрованого домену й префікс лишається —
+     * тож без повторного зрізання в блокування йшов би {@code www.ivi.ru}
+     * замість зони {@code ivi.ru}, і то лише для склеєних імен, тоді як
+     * звичайні зрізаються завжди.
+     *
+     * @param domain доменне ім'я
+     * @param serviceSubdomains перелік службових префіксів
+     * @param logger логер для пояснення, чому префікс лишено
+     * @return ім'я без службового префікса або незмінене
+     */
+    private static String stripServiceSubdomain(String domain, String[] serviceSubdomains, Logger logger) {
+        for (String service : serviceSubdomains) {
+            if (domain.startsWith(service + ".")) {
+                String remainder = domain.substring(service.length() + 1);
+                if (isUnderPublicSuffix(remainder)) {
+                    return remainder;
+                }
+                logger.debug("Keeping {} as is: stripping '{}' would leave public suffix '{}'",
+                        domain, service, remainder);
+                break;
+            }
+        }
+        return domain;
+    }
+
+    /**
      * Чи є ім'я публічним суфіксом (зоною, під якою реєструють домени) —
      * наприклад {@code com.ua}, {@code kiev.ua}, {@code co.uk}, {@code com}.
      *
@@ -339,10 +361,13 @@ public class DomainValidatorUtil {
      *
      * @param domain домен, що не пройшов звичайну валідацію
      * @param domainValidator валідатор доменів
+     * @param serviceSubdomains службові префікси для повторного зрізання
+     * @param logger логер
      * @return вилікуваний Punycode-домен, якщо він валідний без хвоста;
      * інакше {@code null}
      */
-    private static String healGluedSchemeSuffix(String domain, DomainValidator domainValidator) {
+    private static String healGluedSchemeSuffix(String domain, DomainValidator domainValidator,
+            String[] serviceSubdomains, Logger logger) {
         Matcher m = GLUED_SCHEME_SUFFIX.matcher(domain);
         if (!m.find()) {
             return null;
@@ -351,7 +376,7 @@ public class DomainValidatorUtil {
         if (stripped.isEmpty() || !Character.isLetterOrDigit(stripped.charAt(stripped.length() - 1))) {
             return null;
         }
-        return asValidIdnOrNull(stripped, domainValidator);
+        return asValidIdnOrNull(stripServiceSubdomain(stripped, serviceSubdomains, logger), domainValidator);
     }
 
     /**
@@ -370,9 +395,12 @@ public class DomainValidatorUtil {
      *
      * @param domain домен, що не пройшов звичайну валідацію
      * @param domainValidator валідатор доменів
+     * @param serviceSubdomains службові префікси для повторного зрізання
+     * @param logger логер
      * @return вилікуваний Punycode-домен або {@code null}
      */
-    private static String healEmbeddedRowNumber(String domain, DomainValidator domainValidator) {
+    private static String healEmbeddedRowNumber(String domain, DomainValidator domainValidator,
+            String[] serviceSubdomains, Logger logger) {
         Matcher m = EMBEDDED_ROW_NUMBER.matcher(domain);
         String best = null;
         while (m.find()) {
@@ -381,7 +409,9 @@ public class DomainValidatorUtil {
                 // немає, це не склеювання, а чистий шум номера рядка.
                 continue;
             }
-            String candidate = asValidIdnOrNull(domain.substring(0, m.start()), domainValidator);
+            String candidate = asValidIdnOrNull(
+                    stripServiceSubdomain(domain.substring(0, m.start()), serviceSubdomains, logger),
+                    domainValidator);
             if (candidate != null) {
                 best = candidate;
             }
