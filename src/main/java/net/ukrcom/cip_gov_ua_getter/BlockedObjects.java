@@ -45,7 +45,10 @@ public class BlockedObjects {
 
     private final String[] blockedNames;
     private final String blockedResultName;
+    private final String[] serviceSubdomains;
     private final TreeSet<BlockedDomain> blockedDomains;
+    private int normalizedCount = 0;
+    private int refusedCount = 0;
 
     /**
      * Конструктор класа.
@@ -55,6 +58,7 @@ public class BlockedObjects {
     public BlockedObjects(Properties p) {
         this.blockedNames = p.getProperty("blocked", "blocked.txt").split(";");
         this.blockedResultName = p.getProperty("blocked_result", "blocked.result.txt");
+        this.serviceSubdomains = ConfigUtil.serviceSubdomains(p);
         this.blockedDomains = new TreeSet<>(new BlockedDomainComparator());
     }
 
@@ -112,12 +116,43 @@ public class BlockedObjects {
     }
 
     /**
-     * Додає домен до переліку.
+     * Додає домен до переліку, нормалізувавши ім'я.
+     * <p>
+     * Це <b>єдина</b> точка, через яку домени потрапляють у сховище — усіма
+     * трьома шляхами: вхідні файли {@code blocked}, текстові розпорядження
+     * і PDF. Тому нормалізація живе саме тут, а не у {@link #storeState()}:
+     * так її бачить і {@link #getKnownDomainNames()}, тобто дорадчий перелік
+     * не пропонуватиме {@code ivi.ru} лише через те, що в сховищі лежить
+     * {@code www.ivi.ru}.
+     * <p>
+     * Дві дії, обидві — остання лінія оборони, спільна для всіх джерел:
+     * <ul>
+     * <li>зрізання службового префікса. {@link DomainValidatorUtil} робить
+     * це для розпоряджень і PDF, але вхідні файли читаються повз нього, тож
+     * у результаті роками жили {@code www.ivi.ru} поряд із зонами без
+     * префікса. Дублікати, що виникають після зрізання, схлопує сам
+     * {@code TreeSet};</li>
+     * <li>відмова публічному суфіксу. Валідатор його не пропускає, але, знову
+     * ж таки, лише на своїх шляхах — рядок {@code com.ua} у списку
+     * провайдера інакше потрапив би в результат і поклав цілу зону.</li>
+     * </ul>
      *
      * @param bdn об'єкт BlockedDomain
      * @return true, якщо домен додано успішно
      */
     public boolean addBlockedDomainName(BlockedDomain bdn) {
+        String name = DomainValidatorUtil.stripServiceSubdomain(
+                bdn.getDomainName(), this.serviceSubdomains, logger);
+        if (DomainValidatorUtil.isPublicSuffix(name)) {
+            logger.warn("Refusing to store a public suffix: {} (from {})", name, bdn.getDomainName());
+            refusedCount++;
+            return false;
+        }
+        if (!name.equals(bdn.getDomainName())) {
+            logger.debug("Normalized {} to {}", bdn.getDomainName(), name);
+            normalizedCount++;
+            bdn = new BlockedDomain(name, bdn.getIsBlocked(), bdn.getDateTime());
+        }
         return this.blockedDomains.add(bdn);
     }
 
@@ -156,6 +191,11 @@ public class BlockedObjects {
             } else {
                 blockedDomainsResultList.remove(bd.getDomainName());
             }
+        }
+        if (normalizedCount > 0 || refusedCount > 0) {
+            logger.info("Normalized {} domain(s) by stripping service prefixes, refused {} public suffix(es); "
+                    + "{} unique domain(s) to store",
+                    normalizedCount, refusedCount, blockedDomainsResultList.size());
         }
 
         Path targetPath = Paths.get(this.blockedResultName.trim());
