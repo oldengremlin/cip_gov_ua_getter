@@ -42,8 +42,8 @@
 
 ```bash
 mvn clean package                                  # збірка uber-JAR
-java -jar target/cip_gov_ua_getter-3.3.0-all.jar   # звичайний запуск
-java -jar target/cip_gov_ua_getter-3.3.0-all.jar -d # дебаг-режим
+java -jar target/cip_gov_ua_getter-3.3.1-all.jar   # звичайний запуск
+java -jar target/cip_gov_ua_getter-3.3.1-all.jar -d # дебаг-режим
 ```
 
 Конфігурація — `cip.gov.ua.properties` у корені (шлях можна передати аргументом).

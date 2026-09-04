@@ -63,6 +63,18 @@ public class DomainValidatorUtil {
             + "(?:\\.[a-zA-Z0-9\\p{L}\\p{M}-]+)+"
     );
 
+    /**
+     * Хвіст, що вказує на злипання з наступним посиланням у тексті PDF.
+     * {@code prepareDocument} прибирає переноси рядків, тож коли один запис
+     * без схеми ({@code hd.muvee.me}) стоїть у джерелі одразу перед іншим,
+     * що починається зі схеми ({@code https://...}), вони склеюються в
+     * {@code hd.muvee.mehttps}, і жадібна група TLD у "голому" домені
+     * захоплює зайве. {@code htpps} — підтверджений на практиці варіант
+     * {@code https} із переставленими літерами (артефакт вбудованого
+     * шрифту при екстракції тексту з PDF, не власне помилка джерела).
+     */
+    private static final Pattern GLUED_SCHEME_SUFFIX = Pattern.compile("(?i)(https|http|ftp|htpps)$");
+
     public static Set<String> validateDomain(String rawDomain, String[] serviceSubdomains, String sourceDomain,
             DomainValidator domainValidator, InetAddressValidator ipValidator,
             SpoofChecker spoofChecker, Logger logger, boolean includeBlockedDomain,
@@ -168,7 +180,22 @@ public class DomainValidatorUtil {
                     logger.warn("Skipping IP address: {}", domain);
                     continue;
                 } else {
-                    logger.warn("Invalid IDN domain: {}", domain);
+                    // Евристичний фолбек — лише після невдачі звичайної
+                    // валідації, тож справді биті фрагменти без схеми в
+                    // хвості (77.muvee) сюди не потрапляють і лишаються
+                    // Invalid, як і мають.
+                    String healedIdn = healGluedSchemeSuffix(domain, domainValidator);
+                    if (healedIdn != null) {
+                        validDomains.add(healedIdn);
+                        if (includeBlockedDomain) {
+                            blockedDomains.add(new BlockedDomain(healedIdn, true, dateTime));
+                        }
+                        logger.info("Valid IDN domain: {} (heuristically recovered from '{}' — "
+                                + "PDF text likely glued to the next URL without a separator)",
+                                healedIdn, domain);
+                    } else {
+                        logger.warn("Invalid IDN domain: {}", domain);
+                    }
                 }
 
                 // Обробка гомогліфів для нелатинських символів
@@ -240,6 +267,49 @@ public class DomainValidatorUtil {
             return InternetDomainName.from(domain).isUnderPublicSuffix();
         } catch (IllegalArgumentException e) {
             return false;
+        }
+    }
+
+    /**
+     * Пробує «вилікувати» домен, чий кінець злипся зі схемою наступного
+     * посилання ({@code hd.muvee.mehttps} → {@code hd.muvee.me}).
+     * <p>
+     * Викликається лише як фолбек, коли домен уже не пройшов звичайну
+     * валідацію: спершу відрізає хвіст {@link #GLUED_SCHEME_SUFFIX}, потім
+     * заново проганяє результат через ту саму перевірку (публічний суфікс,
+     * IDN, TLD), що й основний шлях. Якщо після відрізання лишається
+     * порожній рядок або лишок не закінчується літерою чи цифрою — не
+     * ризикуємо й повертаємо {@code null}: фрагмент типу {@code 77.muvee}
+     * (без приліпленої схеми) сюди взагалі не потрапляє, а щось на кшталт
+     * випадково відрізаного до дефіса теж не приймається.
+     *
+     * @param domain домен, що не пройшов звичайну валідацію
+     * @param domainValidator валідатор доменів
+     * @return вилікуваний Punycode-домен, якщо він валідний без хвоста;
+     * інакше {@code null}
+     */
+    private static String healGluedSchemeSuffix(String domain, DomainValidator domainValidator) {
+        Matcher m = GLUED_SCHEME_SUFFIX.matcher(domain);
+        if (!m.find()) {
+            return null;
+        }
+        String stripped = domain.substring(0, m.start());
+        if (stripped.isEmpty() || !Character.isLetterOrDigit(stripped.charAt(stripped.length() - 1))) {
+            return null;
+        }
+        try {
+            String strippedIdn = IDN.toASCII(stripped, IDN.ALLOW_UNASSIGNED);
+            if (strippedIdn.length() > 255 || isPublicSuffix(strippedIdn) || !domainValidator.isValid(strippedIdn)) {
+                return null;
+            }
+            String tld = extractTld(strippedIdn);
+            if (tld == null) {
+                return null;
+            }
+            Boolean isValidTld = TLD_CACHE.computeIfAbsent(tld, k -> domainValidator.isValidTld(k));
+            return Boolean.TRUE.equals(isValidTld) ? strippedIdn : null;
+        } catch (IllegalArgumentException e) {
+            return null;
         }
     }
 
